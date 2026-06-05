@@ -1,13 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { createClient } from '@supabase/supabase-js'
-import type { Requirement } from '../types/database.types'
+import { supabase } from '../lib/supabase'
+import { useEnrollStore } from '../composables/useEnrollStore'
 
-// ─── Supabase client ──────────────────────────────────────────────────────────
-// Replace these with your actual Supabase project URL and anon key
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+const store = useEnrollStore()
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface RequirementRow {
@@ -28,9 +24,6 @@ const requirements  = ref<RequirementRow[]>([])
 const isLoading     = ref(false)
 const isSaving      = ref(false)
 const isDeleting    = ref<string | null>(null)
-const toastMsg      = ref('')
-const toastType     = ref<'success' | 'error'>('success')
-const toastVisible  = ref(false)
 const editingId     = ref<string | null>(null)   // null = new, string = editing existing
 
 // Form state
@@ -70,13 +63,6 @@ function formatDate(iso: string | null): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function showToast(msg: string, type: 'success' | 'error' = 'success') {
-  toastMsg.value    = msg
-  toastType.value   = type
-  toastVisible.value = true
-  setTimeout(() => { toastVisible.value = false }, 3500)
-}
-
 function padIndex(i: number) { return String(i).padStart(2, '0') }
 
 function resetForm() {
@@ -109,7 +95,7 @@ async function fetchRequirements() {
     if (error) throw error
     requirements.value = data as RequirementRow[]
   } catch (err: any) {
-    showToast(err.message ?? 'Failed to fetch requirements.', 'error')
+    store.showToast(err.message ?? 'Failed to fetch requirements.', 'error')
   } finally {
     isLoading.value = false
   }
@@ -117,7 +103,7 @@ async function fetchRequirements() {
 
 async function saveRequirement() {
   if (!form.value.name.trim()) {
-    showToast('Requirement name is required.', 'error')
+    store.showToast('Requirement name is required.', 'error')
     return
   }
 
@@ -125,7 +111,7 @@ async function saveRequirement() {
   try {
     if (isEditing.value) {
       // UPDATE existing
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('requirement')
         .update({
           name:         form.value.name.trim(),
@@ -138,9 +124,9 @@ async function saveRequirement() {
         .eq('id', editingId.value!)
 
       if (error) throw error
-      showToast('Requirement updated successfully.')
+      store.showToast('Requirement updated successfully.')
     } else {
-      const { error } = await supabase
+      const { error } = await ( supabase as any)
         .from('requirement')
         .insert({
           name:         form.value.name.trim(),
@@ -154,13 +140,13 @@ async function saveRequirement() {
         })
 
       if (error) throw error
-      showToast('Requirement added successfully.')
+      store.showToast('Requirement added successfully.')
     }
 
     resetForm()
     await fetchRequirements()
   } catch (err: any) {
-    showToast(err.message ?? 'Failed to save requirement.', 'error')
+    store.showToast(err.message ?? 'Failed to save requirement.', 'error')
   } finally {
     isSaving.value = false
   }
@@ -170,17 +156,17 @@ async function deleteRequirement(id: string) {
   if (!confirm('Delete this requirement? This cannot be undone.')) return
   isDeleting.value = id
   try {
-    const { error } = await supabase
+    const { error } = await ( supabase as any )
       .from('requirement')
       .update({ is_deleted: true })
       .eq('id', id)
 
     if (error) throw error
-    showToast('Requirement removed.')
+    store.showToast('Requirement removed.')
     if (editingId.value === id) resetForm()
     await fetchRequirements()
   } catch (err: any) {
-    showToast(err.message ?? 'Failed to delete requirement.', 'error')
+    store.showToast(err.message ?? 'Failed to delete requirement.', 'error')
   } finally {
     isDeleting.value = null
   }
@@ -209,14 +195,6 @@ watch(requirements, (list) => {
         <span class="req-count">{{ requirements.length }} requirement{{ requirements.length !== 1 ? 's' : '' }}</span>
       </div>
     </div>
-
-    <!-- Toast notification -->
-    <Transition name="toast">
-      <div v-if="toastVisible" :class="['toast', toastType === 'error' ? 'toast--error' : 'toast--success']">
-        <span class="toast-icon">{{ toastType === 'error' ? '✕' : '✓' }}</span>
-        {{ toastMsg }}
-      </div>
-    </Transition>
 
     <div class="workspace-grid">
 
@@ -455,20 +433,20 @@ watch(requirements, (list) => {
 
 .page-eyebrow {
   margin: 0 0 0.35rem;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--clr-stone);
+  color: var(--clr-slate);
   font-weight: 600;
 }
 
 .page-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 2rem;
+  font-size: 2.2rem;
   font-weight: 800;
   color: var(--clr-ink);
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
 }
 
 .header-meta { display: flex; align-items: center; gap: 0.75rem; }
@@ -477,54 +455,10 @@ watch(requirements, (list) => {
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--clr-stone);
-  background: rgba(79,99,103,0.1);
+  background: var(--clr-fog);
   padding: 0.4rem 0.9rem;
   border-radius: var(--radius-pill);
 }
-
-/* ── Toast ──────────────────────────────────────────────────────────────────── */
-.toast {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.9rem 1.2rem;
-  border-radius: var(--radius-md);
-  font-size: 0.9rem;
-  font-weight: 600;
-  position: fixed;
-  top: 1.5rem;
-  right: 1.5rem;
-  z-index: 9999;
-  box-shadow: var(--shadow-card);
-  min-width: 280px;
-}
-
-.toast--success {
-  background: linear-gradient(135deg, rgba(122,158,159,0.22), rgba(184,216,216,0.95));
-  color: var(--clr-ink);
-  border: 1px solid rgba(122,158,159,0.35);
-}
-
-.toast--error {
-  background: rgba(255,235,235,0.97);
-  color: #7a2020;
-  border: 1px solid rgba(200,80,80,0.3);
-}
-
-.toast-icon {
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.1);
-  font-size: 0.7rem;
-  font-weight: 800;
-  flex-shrink: 0;
-}
-
-.toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-12px) scale(0.97); }
 
 /* ── Grid ───────────────────────────────────────────────────────────────────── */
 .workspace-grid {
@@ -536,9 +470,9 @@ watch(requirements, (list) => {
 
 /* ── Panels ─────────────────────────────────────────────────────────────────── */
 .panel {
-  background: rgba(224,226,219,0.96);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--clr-slate);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -557,14 +491,14 @@ watch(requirements, (list) => {
   font-size: 0.7rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(25,23,22,0.5);
+  color: var(--clr-slate);
   font-weight: 600;
 }
 
 .panel-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--clr-ink);
   letter-spacing: -0.02em;
@@ -576,7 +510,7 @@ watch(requirements, (list) => {
 .sort-label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: rgba(25,23,22,0.5);
+  color: var(--clr-stone);
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
@@ -585,21 +519,24 @@ watch(requirements, (list) => {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--clr-stone);
-  background: rgba(79,99,103,0.1);
-  border: 1px solid rgba(79,99,103,0.18);
+  background: var(--clr-fog);
+  border: 1px solid transparent;
   border-radius: var(--radius-pill);
   padding: 0.35rem 0.7rem;
   outline: none;
   cursor: pointer;
+  transition: all var(--transition);
 }
+
+.sort-select:hover { background: var(--clr-mist); }
 
 /* ── Skeleton loader ────────────────────────────────────────────────────────── */
 .skeleton-list { display: flex; flex-direction: column; gap: 0.85rem; }
 
 .skeleton-card {
   height: 80px;
-  border-radius: var(--radius-md);
-  background: linear-gradient(90deg, rgba(79,99,103,0.08) 25%, rgba(79,99,103,0.16) 50%, rgba(79,99,103,0.08) 75%);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--clr-fog) 25%, var(--clr-mist) 50%, var(--clr-fog) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.4s infinite;
 }
@@ -629,13 +566,13 @@ watch(requirements, (list) => {
   margin: 0;
   font-size: 0.95rem;
   font-weight: 700;
-  color: var(--clr-ink);
+  color: var(--clr-stone);
 }
 
 .empty-sub {
   margin: 0;
   font-size: 0.82rem;
-  color: rgba(25,23,22,0.55);
+  color: var(--clr-slate);
   line-height: 1.5;
   max-width: 22ch;
 }
@@ -649,21 +586,21 @@ watch(requirements, (list) => {
   gap: 1rem;
   align-items: start;
   padding: 1rem;
-  border-radius: var(--radius-md);
-  background: rgba(255,255,255,0.62);
-  border: 1px solid rgba(122,158,159,0.18);
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  border-radius: var(--radius-sm);
+  background: #fafafa;
+  border: 1px solid var(--clr-fog);
+  transition: border-color var(--transition), box-shadow var(--transition);
 }
 
 .req-card:hover {
-  border-color: rgba(122,158,159,0.45);
+  border-color: var(--clr-slate);
   box-shadow: var(--shadow-subtle);
 }
 
 .req-card--editing {
-  border-color: var(--clr-slate);
-  background: rgba(184,216,216,0.18);
-  box-shadow: 0 0 0 2px rgba(122,158,159,0.25);
+  border-color: var(--clr-stone);
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(122, 158, 159, 0.15);
 }
 
 .req-card__index {
@@ -672,14 +609,14 @@ watch(requirements, (list) => {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--clr-mist), var(--clr-slate));
+  background: var(--clr-fog);
   flex-shrink: 0;
 }
 
 .req-card__index span {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 800;
-  color: var(--clr-ink);
+  color: var(--clr-stone);
   font-family: var(--font-display);
 }
 
@@ -693,7 +630,7 @@ watch(requirements, (list) => {
 }
 
 .req-name {
-  font-size: 0.92rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--clr-ink);
   line-height: 1.3;
@@ -710,19 +647,19 @@ watch(requirements, (list) => {
 }
 
 .mandatory-badge--yes {
-  background: rgba(79,99,103,0.15);
+  background: rgba(122, 158, 159, 0.15);
   color: var(--clr-stone);
 }
 
 .mandatory-badge--no {
-  background: rgba(184,216,216,0.35);
-  color: #456b6c;
+  background: var(--clr-fog);
+  color: var(--clr-stone);
 }
 
 .req-desc {
   margin: 0;
-  font-size: 0.8rem;
-  color: rgba(25,23,22,0.65);
+  font-size: 0.85rem;
+  color: var(--clr-stone);
   line-height: 1.45;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -745,7 +682,7 @@ watch(requirements, (list) => {
   font-size: 0.75rem;
   color: var(--clr-stone);
   font-weight: 600;
-  background: rgba(79,99,103,0.08);
+  background: var(--clr-fog);
   padding: 0.25rem 0.6rem;
   border-radius: var(--radius-pill);
 }
@@ -762,13 +699,13 @@ watch(requirements, (list) => {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  padding: 0.38rem 0.7rem;
+  padding: 0.4rem 0.8rem;
   border-radius: var(--radius-pill);
   border: none;
   font-size: 0.75rem;
   font-weight: 700;
   cursor: pointer;
-  transition: transform var(--transition), background var(--transition);
+  transition: all var(--transition);
   white-space: nowrap;
 }
 
@@ -776,23 +713,23 @@ watch(requirements, (list) => {
 .action-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 .action-btn--edit {
-  background: linear-gradient(135deg, var(--clr-mist), var(--clr-slate));
-  color: var(--clr-ink);
+  background: var(--clr-fog);
+  color: var(--clr-stone);
 }
+.action-btn--edit:hover { background: var(--clr-mist); }
 
 .action-btn--delete {
-  background: rgba(79,99,103,0.1);
-  color: #7a2020;
-  border: 1px solid rgba(200,80,80,0.2);
+  background: rgba(211, 47, 47, 0.05);
+  color: #d32f2f;
+  border: 1px solid transparent;
 }
-
 .action-btn--delete:hover {
-  background: rgba(200,80,80,0.12);
+  background: rgba(211, 47, 47, 0.12);
 }
 
 /* ── Form panel ─────────────────────────────────────────────────────────────── */
 .form-panel {
-  background: linear-gradient(160deg, #1f2c2e 0%, #192425 100%);
+  background: #ffffff; /* Strip the dark background */
   padding: 0;
 }
 
@@ -800,8 +737,8 @@ watch(requirements, (list) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.5rem 1.5rem 1.25rem;
-  border-bottom: 1px solid rgba(184,216,216,0.1);
+  padding: 1.5rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--clr-fog);
 }
 
 .form-header__left { display: flex; align-items: center; gap: 0.9rem; }
@@ -811,48 +748,48 @@ watch(requirements, (list) => {
   place-items: center;
   width: 40px;
   height: 40px;
-  border-radius: 12px;
-  background: rgba(184,216,216,0.12);
-  color: var(--clr-mist);
-  border: 1px solid rgba(184,216,216,0.18);
+  border-radius: var(--radius-sm);
+  background: var(--clr-fog);
+  color: var(--clr-stone);
   flex-shrink: 0;
 }
 
-.form-panel .panel-eyebrow { color: rgba(224,226,219,0.45); }
-.form-panel .panel-title   { color: var(--clr-fog); }
+.form-panel .panel-eyebrow { color: var(--clr-slate); }
+.form-panel .panel-title   { color: var(--clr-ink); }
 
 .cancel-btn {
-  padding: 0.42rem 0.9rem;
+  padding: 0.45rem 1rem;
   border-radius: var(--radius-pill);
-  border: 1px solid rgba(224,226,219,0.2);
-  background: rgba(224,226,219,0.08);
-  color: rgba(224,226,219,0.7);
+  border: 1px solid var(--clr-mist);
+  background: transparent;
+  color: var(--clr-stone);
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--transition), color var(--transition);
+  transition: all var(--transition);
 }
 
 .cancel-btn:hover {
-  background: rgba(224,226,219,0.14);
-  color: var(--clr-fog);
+  background: var(--clr-fog);
+  color: var(--clr-ink);
 }
 
 /* ── Form body ──────────────────────────────────────────────────────────────── */
 .form-body {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
   padding: 1.5rem;
 }
 
 .form-group { display: flex; flex-direction: column; gap: 0.45rem; }
 
 .form-label {
-  font-size: 0.78rem;
+  font-size: 0.85rem;
   font-weight: 600;
-  color: rgba(224,226,219,0.7);
-  letter-spacing: 0.04em;
+  color: var(--clr-stone);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .required-dot { color: #e87b7b; margin-left: 2px; }
@@ -861,21 +798,18 @@ watch(requirements, (list) => {
   width: 100%;
   padding: 0.8rem 1rem;
   border-radius: var(--radius-sm);
-  border: 1px solid rgba(184,216,216,0.16);
-  background: rgba(255,255,255,0.05);
-  color: var(--clr-fog);
-  font-size: 0.88rem;
+  border: 1px solid var(--clr-mist);
+  background: #fcfcfc;
+  color: var(--clr-ink);
+  font-size: 0.95rem;
   outline: none;
-  transition: border-color 0.2s, background 0.2s;
-  font-family: var(--font-body);
+  transition: border-color var(--transition);
+  font-family: inherit;
 }
 
-.form-input::placeholder { color: rgba(224,226,219,0.3); }
+.form-input::placeholder { color: #a0a0a0; }
 
-.form-input:focus {
-  border-color: rgba(184,216,216,0.4);
-  background: rgba(255,255,255,0.08);
-}
+.form-input:focus { border-color: var(--clr-stone); }
 
 .form-textarea {
   resize: vertical;
@@ -893,17 +827,14 @@ watch(requirements, (list) => {
 .date-icon {
   position: absolute;
   left: 0.85rem;
-  color: rgba(184,216,216,0.45);
+  color: var(--clr-slate);
   pointer-events: none;
   z-index: 1;
 }
 
 .date-input { padding-left: 2.2rem; }
-
-.date-input::-webkit-calendar-picker-indicator {
-  filter: invert(0.6);
-  cursor: pointer;
-}
+/* Removed the filter invert rule so the calendar picker is visible on light themes */
+.date-input::-webkit-calendar-picker-indicator { cursor: pointer; }
 
 .form-dates-row {
   display: grid;
@@ -916,29 +847,29 @@ watch(requirements, (list) => {
 
 .toggle-chip {
   flex: 1;
-  padding: 0.6rem 0.75rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid rgba(184,216,216,0.16);
-  background: rgba(255,255,255,0.05);
-  color: rgba(224,226,219,0.6);
-  font-size: 0.8rem;
+  padding: 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--clr-mist);
+  background: #fcfcfc;
+  color: var(--clr-slate);
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition);
 }
 
-.toggle-chip:hover { background: rgba(255,255,255,0.09); color: var(--clr-fog); }
+.toggle-chip:hover { background: var(--clr-fog); color: var(--clr-stone); }
 
 .toggle-chip--active {
-  background: linear-gradient(135deg, var(--clr-mist), var(--clr-slate));
-  color: var(--clr-ink);
-  border-color: transparent;
+  background: var(--clr-stone);
+  color: #ffffff;
+  border-color: var(--clr-stone);
 }
 
 .toggle-chip--optional.toggle-chip--active {
-  background: rgba(184,216,216,0.2);
-  color: var(--clr-mist);
-  border-color: rgba(184,216,216,0.3);
+  background: var(--clr-slate);
+  color: #ffffff;
+  border-color: var(--clr-slate);
 }
 
 /* ── Save button ────────────────────────────────────────────────────────────── */
@@ -952,24 +883,16 @@ watch(requirements, (list) => {
   margin-top: 0.5rem;
   border: none;
   border-radius: var(--radius-pill);
-  background: linear-gradient(135deg, var(--clr-mist), var(--clr-slate));
-  color: var(--clr-ink);
+  background: var(--clr-stone);
+  color: var(--clr-fog);
   font-size: 0.95rem;
   font-weight: 700;
   cursor: pointer;
-  transition: transform var(--transition), box-shadow var(--transition), opacity var(--transition);
-  box-shadow: 0 6px 20px rgba(122,158,159,0.3);
+  transition: opacity var(--transition);
 }
 
-.save-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 28px rgba(122,158,159,0.4);
-}
-
-.save-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
+.save-btn:hover:not(:disabled) { opacity: 0.9; }
+.save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 /* ── Spinner ────────────────────────────────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(360deg); } }

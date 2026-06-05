@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { signIn, signOut, getSession, fetchUserProfile } from '../services/Authservice'
-import { fetchAnnouncements, publishAnnouncement as publishAnnouncementService } from '../services/Announcementservice'
+import { fetchAnnouncements, publishAnnouncement as publishAnnouncementService,updateAnnouncement as updateAnnouncementService,toggleAnnouncementPin,retractAnnouncement } from '../services/Announcementservice'
 import { fetchChecklistSteps, addChecklistStep as addStepService, deleteChecklistStep, reorderChecklistSteps } from '../services/Checklistservice'
 import { fetchAppointmentSlots, createAppointmentSlot, cancelAppointmentSlot } from '../services/Appointmentservice'
 import type {
@@ -24,16 +24,29 @@ const loginForm      = ref({ email: '', password: '' })
 
 const activeSection = ref<'overview' | 'checklist' | 'announcements' | 'appointments'>('overview')
 
+// Global Toast State
+  const toastMsg     = ref('')
+  const toastType    = ref<'success' | 'error'>('success')
+  const toastVisible = ref(false)
+
+  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+    toastMsg.value     = msg
+    toastType.value    = type
+    toastVisible.value = true
+    setTimeout(() => { toastVisible.value = false }, 3500)
+  }
+
 // ─── Use case 2: Announcements ────────────────────────────────────────────────
 
 const announcements = ref<AnnouncementView[]>([])
+  const announcementDraft = ref<AnnouncementDraft>({
+    title: '',
+    body: '',
+    priority: 'Standard',
+  })
 
-const announcementDraft = ref<AnnouncementDraft>({
-  title: '',
-  body: '',
-  priority: 'Standard',
-  audience: 'All students',
-})
+const editingAnnouncementId = ref<string | null>(null)
+
 
 // ─── Use case 1: Checklist configuration ─────────────────────────────────────
 
@@ -151,22 +164,67 @@ async function loadAnnouncements() {
   announcements.value = await fetchAnnouncements()
 }
 
-/**
- * Admin hits "Publish" on AnnouncementsPage.
- * Validates the draft has at minimum a title, then inserts and prepends to the feed.
- */
-async function publishAnnouncement() {
-  if (!currentUserId.value) return
-  if (!announcementDraft.value.title.trim()) return // silent guard; add a UI toast if needed
+function startEditAnnouncement(a: AnnouncementView) {
+    editingAnnouncementId.value = a.id
+    announcementDraft.value = {
+      title: a.title,
+      body: a.body,
+      priority: a.priority
+    }
+    // Scroll the form into view smoothly
+    document.querySelector('.clean-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
-  const newItem = await publishAnnouncementService(announcementDraft.value, currentUserId.value)
-
-  // Optimistic prepend — no need to refetch the whole list
-  announcements.value.unshift(newItem)
-
-  // Reset the draft form
-  announcementDraft.value = { title: '', body: '', priority: 'Standard', audience: 'All students' }
+function cancelEditAnnouncement() {
+  editingAnnouncementId.value = null
+  announcementDraft.value = { title: '', body: '', priority: 'Standard' }
 }
+
+async function publishAnnouncement() {
+    if (!currentUserId.value) return
+    
+    if (!announcementDraft.value.title.trim() || !announcementDraft.value.body.trim()) {
+      showToast('Both the Announcement Title and Message Body are required.', 'error')
+      return 
+    }
+
+    try {
+      if (editingAnnouncementId.value) {
+        await updateAnnouncementService(editingAnnouncementId.value, announcementDraft.value)
+        showToast('Announcement updated successfully!', 'success')
+      } else {
+        await publishAnnouncementService(announcementDraft.value, currentUserId.value)
+        showToast('Announcement published successfully!', 'success')
+      }
+      
+      cancelEditAnnouncement()
+      await loadAnnouncements() // Fetches updated DB with 5 item limit
+    } catch (error: any) {
+      showToast(error.message || 'Failed to save the announcement.', 'error')
+    }
+  }
+
+
+  async function deleteAnnouncement(id: string) {
+    if (!confirm('Are you sure you want to delete this announcement?')) return
+    try {
+      await retractAnnouncement(id)
+      showToast('Announcement removed.', 'success')
+      if (editingAnnouncementId.value === id) cancelEditAnnouncement()
+      await loadAnnouncements()
+    } catch (error: any) {
+      showToast(error.message || 'Failed to delete announcement.', 'error')
+    }
+  }
+
+  async function togglePin(announcementId: string, currentPinState: boolean) {
+    try {
+      await toggleAnnouncementPin(announcementId, currentPinState)
+      await loadAnnouncements() // Reloads to instantly sort to the top
+    } catch (error: any) {
+      showToast(error.message || 'Failed to toggle pin.', 'error')
+    }
+  }
 
 // ─── Use case 1: Configure the enrollment checklist ──────────────────────────
 
@@ -265,6 +323,7 @@ export function useEnrollStore() {
     // use case 2 — announcements
     announcements,
     announcementDraft,
+    editingAnnouncementId,
 
     // use case 1 — checklist
     checklistSteps,
@@ -282,6 +341,12 @@ export function useEnrollStore() {
     activeSlot,
     studentTimeline,
 
+    // Global Toast
+    toastMsg,
+    toastType,
+    toastVisible,
+    showToast,
+
     // auth actions
     signIn:         signInAction,
     signOut:        signOutAction,
@@ -290,6 +355,10 @@ export function useEnrollStore() {
     // use case 2
     publishAnnouncement,
     loadAnnouncements,
+    togglePin,
+    startEditAnnouncement,
+    cancelEditAnnouncement,
+    deleteAnnouncement,
 
     // use case 1
     addChecklistStep,

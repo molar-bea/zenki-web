@@ -39,7 +39,7 @@ export interface Announcement {
   user_id: string       // admin who published it
   title: string
   body: string
-  target_role: UserRole | null
+  priority: 'High priority' | 'Standard'
   is_deleted: boolean
   created_at: string
 }
@@ -114,7 +114,7 @@ export interface AnnouncementView {
   title: string
   body: string
   priority: 'High priority' | 'Standard'
-  audience: string
+  is_pinned: boolean
   publishedAt: string
 }
 
@@ -125,7 +125,6 @@ export interface AnnouncementDraft {
   title: string
   body: string
   priority: 'High priority' | 'Standard'
-  audience: string
 }
 
 /**
