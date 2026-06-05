@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AppointmentSlot } from '../types'
+import type { AppointmentSlot } from '../types/database.types'
 
 const props = defineProps(['appointmentSlots', 'selectedSlotId', 'activeSlot'])
 const emit = defineEmits<{

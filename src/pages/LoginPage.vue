@@ -2,7 +2,7 @@
 import enrollmateLogo from '../assets/enrollmateLogo.png'
 
 const props = defineProps<{
-  loginForm: { username: string; password: string }
+  loginForm: { email: string; password: string }
 }>()
 
 const emit = defineEmits<{
@@ -26,7 +26,7 @@ const emit = defineEmits<{
       
       
       <form class=" login-form" @submit.prevent="emit('sign-in')">
-        <input v-model="loginForm.username" type="text" placeholder="Username" />
+        <input v-model="loginForm.email" type="email" placeholder="Email" />
         <input v-model="loginForm.password" type="password" placeholder="Password" />
         <button type="submit" class="btn-signin">Sign in</button>
       </form>

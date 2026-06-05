@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, onMounted } from 'vue'
 import { useEnrollStore } from '../composables/useEnrollStore.ts'
 import LoginPage from './LoginPage.vue'
 import OverviewPage from './OverviewPage.vue'
@@ -9,6 +9,9 @@ import AppointmentsPage from './AppointmentsPage.vue'
 import AppSidebar from '../components/AppSidebar.vue'
 
 const store = reactive(useEnrollStore())
+
+// Restore an existing Supabase session on page load
+onMounted(() => store.restoreSession())
 </script>
 
 <template>
@@ -16,14 +19,16 @@ const store = reactive(useEnrollStore())
     <LoginPage
       v-if="!store.loggedIn"
       :login-form="store.loginForm"
+      :login-error="store.loginError"
+      :is-loading="store.isLoading"
       @sign-in="store.signIn"
     />
 
     <section v-else class="dashboard">
-      <AppSidebar
+        <AppSidebar
         :active-section="store.activeSection"
-        @navigate="(s) => (store.activeSection = s)"
-        @sign-out="() => (store.loggedIn = false)"
+        @navigate="(s) => (store.activeSection = s as any)"
+        @sign-out="store.signOut"
       />
 
       <main class="dashboard__main">
@@ -49,7 +54,7 @@ const store = reactive(useEnrollStore())
           :student-timeline="store.studentTimeline"
           @add-step="store.addChecklistStep"
           @activate-step="store.activateStep"
-          @toggle-status="store.toggleChecklistStatus"
+          @remove-step="store.removeChecklistStep"
         />
         <AnnouncementsPage
           v-else-if="store.activeSection === 'announcements'"
@@ -62,8 +67,9 @@ const store = reactive(useEnrollStore())
           :appointment-slots="store.appointmentSlots"
           :selected-slot-id="store.selectedSlotId"
           :active-slot="store.activeSlot"
-          @select-slot="(id) => (store.selectedSlotId = id)"
-          @reserve-slot="store.reserveSlot"
+          @select-slot="(id) => (store.selectedSlotId = id as any)"
+          @set-slot="store.setAppointmentSlot"
+          @cancel-slot="store.cancelSlot"
         />
       </main>
     </section>

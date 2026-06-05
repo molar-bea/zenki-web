@@ -1,118 +1,304 @@
-import { computed, reactive, ref } from 'vue'
-import type { Announcement, AnnouncementPriority, AppointmentSlot, ChecklistStep, StepStatus } from '../types'
+import { ref, computed } from 'vue'
+import { signIn, signOut, getSession, fetchUserProfile } from '../services/Authservice'
+import { fetchAnnouncements, publishAnnouncement as publishAnnouncementService } from '../services/Announcementservice'
+import { fetchChecklistSteps, addChecklistStep as addStepService, deleteChecklistStep, reorderChecklistSteps } from '../services/Checklistservice'
+import { fetchAppointmentSlots, createAppointmentSlot, cancelAppointmentSlot } from '../services/Appointmentservice'
+import type {
+  AnnouncementView,
+  AnnouncementDraft,
+  ChecklistStep,
+  AppointmentSlot,
+  AppointmentType,
+} from '../types/database.types'
+
+// ─── Auth state ───────────────────────────────────────────────────────────────
+
+const loggedIn       = ref(false)
+const currentUserId  = ref<string | null>(null)
+const currentUserName = ref<string>('Admin')
+const loginError     = ref<string | null>(null)
+const isLoading      = ref(false)
+const loginForm      = ref({ email: '', password: '' })
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
+
+const activeSection = ref<'overview' | 'checklist' | 'announcements' | 'appointments'>('overview')
+
+// ─── Use case 2: Announcements ────────────────────────────────────────────────
+
+const announcements = ref<AnnouncementView[]>([])
+
+const announcementDraft = ref<AnnouncementDraft>({
+  title: '',
+  body: '',
+  priority: 'Standard',
+  audience: 'All students',
+})
+
+// ─── Use case 1: Checklist configuration ─────────────────────────────────────
+
+const checklistSteps = ref<ChecklistStep[]>([])
+const activeStepId   = ref<string | null>(null)
+
+
+// ─── Use case 3: Appointment scheduling ──────────────────────────────────────
+
+const appointmentSlots = ref<AppointmentSlot[]>([])
+const selectedSlotId   = ref<string | null>(null)
+
+// ─── Computed ─────────────────────────────────────────────────────────────────
+
+// Overview card: how many steps have been defined
+const totalSteps = computed(() => checklistSteps.value.length)
+
+// Overview card: completion % across the defined steps
+// (Admin view — always shows 0 until students start completing steps)
+const completedSteps = computed(
+  () => checklistSteps.value.filter((s) => s.status === 'completed').length,
+)
+const completionRate = computed(() =>
+  totalSteps.value === 0
+    ? 0
+    : Math.round((completedSteps.value / totalSteps.value) * 100),
+)
+
+// Triggers the success banner when every step is completed
+const allStepsCompleted = computed(
+  () => totalSteps.value > 0 && completedSteps.value === totalSteps.value,
+)
+
+// The slot card the admin has selected in AppointmentsPage
+const activeSlot = computed(
+  () => appointmentSlots.value.find((s) => s.id === selectedSlotId.value) ?? null,
+)
+
+// Timeline fed to the right-hand panel on ChecklistPage
+const studentTimeline = computed(() =>
+  checklistSteps.value.map((s, i) => ({
+    id: s.id,
+    order: i + 1,
+    title: s.title,
+    status: s.status,
+    active: s.id === activeStepId.value,
+  })),
+)
+
+// ─── Auth actions ─────────────────────────────────────────────────────────────
+
+async function signInAction() {
+  loginError.value = null
+  isLoading.value  = true
+  try {
+    const session = await signIn(loginForm.value.email, loginForm.value.password)
+    if (!session) throw new Error('Login failed — no session returned.')
+
+    const profile = await fetchUserProfile(session.user.id)
+    if (!profile || profile.role !== 'admin') {
+      await signOut()
+      throw new Error('Access denied: admin accounts only.')
+    }
+
+    currentUserId.value   = session.user.id
+    currentUserName.value = profile.full_name ?? currentUserName.value
+    loggedIn.value        = true
+    loginForm.value       = { email: '', password: '' }
+
+    // Load all three sections in parallel on login
+    await Promise.all([
+      loadAnnouncements(),
+      loadChecklistSteps(),
+      loadAppointmentSlots(),
+    ])
+  } catch (err: unknown) {
+    loginError.value = err instanceof Error ? err.message : 'Sign-in failed.'
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function signOutAction() {
+  await signOut()
+  loggedIn.value        = false
+  currentUserId.value   = null
+  announcements.value   = []
+  checklistSteps.value  = []
+  appointmentSlots.value = []
+  activeSection.value   = 'overview'
+}
+
+/** Restore an existing Supabase session on page load (called from index.vue onMounted). */
+async function restoreSession() {
+  const session = await getSession()
+  if (!session) return
+
+  const profile = await fetchUserProfile(session.user.id)
+  if (!profile || profile.role !== 'admin') return
+
+  currentUserId.value   = session.user.id
+  currentUserName.value = profile.full_name ?? currentUserName.value
+  loggedIn.value        = true
+
+  await Promise.all([
+    loadAnnouncements(),
+    loadChecklistSteps(),
+    loadAppointmentSlots(),
+  ])
+}
+
+// ─── Use case 2: Publish announcements ───────────────────────────────────────
+
+async function loadAnnouncements() {
+  announcements.value = await fetchAnnouncements()
+}
+
+/**
+ * Admin hits "Publish" on AnnouncementsPage.
+ * Validates the draft has at minimum a title, then inserts and prepends to the feed.
+ */
+async function publishAnnouncement() {
+  if (!currentUserId.value) return
+  if (!announcementDraft.value.title.trim()) return // silent guard; add a UI toast if needed
+
+  const newItem = await publishAnnouncementService(announcementDraft.value, currentUserId.value)
+
+  // Optimistic prepend — no need to refetch the whole list
+  announcements.value.unshift(newItem)
+
+  // Reset the draft form
+  announcementDraft.value = { title: '', body: '', priority: 'Standard', audience: 'All students' }
+}
+
+// ─── Use case 1: Configure the enrollment checklist ──────────────────────────
+
+async function loadChecklistSteps() {
+  checklistSteps.value = await fetchChecklistSteps() // Removed activeProgramId.value
+  if (checklistSteps.value.length > 0 && !activeStepId.value) {
+    activeStepId.value = checklistSteps.value[0]!.id
+  }
+}
+
+/** Select a step to show in the right-hand detail panel. */
+function activateStep(id: string) {
+  activeStepId.value = id
+}
+
+/**
+ * Admin clicks "+ Add step" on ChecklistPage.
+ * Creates a new requirement with a default name and appends it to the list.
+ * Admin can rename it inline afterwards (wire updateChecklistStep when you add that UI).
+ */
+async function addChecklistStep() {
+  const nextOrder = checklistSteps.value.length + 1
+  const newStep = await addStepService({
+    name: `Step ${nextOrder}`,
+    description: 'Describe this enrollment requirement.',
+    stepOrder: nextOrder,
+  }) // Removed programId and isMandatory
+
+  checklistSteps.value.push(newStep)
+  activeStepId.value = newStep.id
+}
+
+/**
+ * Admin removes a step from the checklist.
+ * Soft-deletes in the DB; removes from local list immediately.
+ */
+async function removeChecklistStep(stepId: string) {
+  await deleteChecklistStep(stepId)
+  checklistSteps.value = checklistSteps.value.filter((s) => s.id !== stepId)
+  if (activeStepId.value === stepId) {
+    activeStepId.value = checklistSteps.value[0]?.id ?? null
+  }
+}
+
+// ─── Use case 3: Appointment scheduling ──────────────────────────────────────
+
+async function loadAppointmentSlots() {
+  appointmentSlots.value = await fetchAppointmentSlots()
+  if (appointmentSlots.value.length > 0 && !selectedSlotId.value) {
+    selectedSlotId.value = appointmentSlots.value[0]!.id
+  }
+}
+
+/**
+ * Admin sets an appointment slot for a specific applicant.
+ * Called from AppointmentsPage when the admin hits "Reserve Selected".
+ *
+ * @param applicationId   – the applicant's application UUID
+ * @param appointmentType – type of visit (campus_visit, medical_exam, etc.)
+ * @param scheduledDate   – the chosen datetime
+ */
+async function setAppointmentSlot(params: {
+  applicationId: string
+  appointmentType: AppointmentType
+  scheduledDate: Date
+}) {
+  await createAppointmentSlot(params)
+  // Refresh the headcount dashboard after creating the slot
+  await loadAppointmentSlots()
+}
+
+/**
+ * Admin cancels a slot (e.g. walk-in handled early, or reschedule needed).
+ */
+async function cancelSlot(appointmentId: string) {
+  await cancelAppointmentSlot(appointmentId)
+  await loadAppointmentSlots()
+}
+
+// ─── Export ───────────────────────────────────────────────────────────────────
 
 export function useEnrollStore() {
-  const loggedIn = ref(false)
-  const activeSection = ref('overview')
-  const activeStepId = ref(1)
-
-  const loginForm = reactive({
-    username: 'Administrator1',
-    password: '',
-  })
-
-  const checklistSteps = ref<ChecklistStep[]>([
-    { id: 1, title: 'Pass Documents', description: 'Review original copies, admission forms, and supporting records.', status: 'completed' },
-    { id: 2, title: 'Medical Exam', description: 'Queue the student for physical screening and health clearance.', status: 'in-review' },
-    { id: 3, title: 'Payment Confirmation', description: 'Verify tuition and enrollment fees before final approval.', status: 'pending' },
-    { id: 4, title: 'Orientation Release', description: 'Unlock the final clearance and send the completion notice.', status: 'pending' },
-  ])
-
-  const announcementDraft = reactive({
-    title: 'Exam Schedule Timeline',
-    audience: 'All enrolled students',
-    body: 'The medical exam queue opens at 8:00 AM. Bring valid ID, payment receipt, and completed forms.',
-    priority: 'High priority' as AnnouncementPriority,
-  })
-
-  const announcements = ref<Announcement[]>([
-    { id: 1, title: 'Medical Requirements Updated', audience: 'Incoming freshmen', publishedAt: 'Today, 08:20 AM', body: 'The clinic now requires one printed copy of the updated physical form before screening.', priority: 'High priority' },
-    { id: 2, title: 'Enrollment Window Reminder', audience: 'All students', publishedAt: 'Yesterday, 04:40 PM', body: 'Enrollment verification closes at 5:00 PM every Friday to keep the campus queue manageable.', priority: 'Standard' },
-  ])
-
-  const appointmentSlots = ref<AppointmentSlot[]>([
-    { id: 1, label: 'Document Submission', date: 'June 8', time: '09:00 AM - 10:30 AM', requirement: 'Pass Documents', booked: 18, capacity: 24 },
-    { id: 2, label: 'Medical Screening', date: 'June 8', time: '11:00 AM - 01:00 PM', requirement: 'Medical Exam', booked: 12, capacity: 18 },
-    { id: 3, label: 'Cashier Review', date: 'June 9', time: '09:30 AM - 11:30 AM', requirement: 'Payment Confirmation', booked: 9, capacity: 16 },
-  ])
-
-  const selectedSlotId = ref(2)
-
-  // Computed
-  const activeSlot = computed(() =>
-    appointmentSlots.value.find((s) => s.id === selectedSlotId.value) ?? appointmentSlots.value[0]
-  )
-  const totalStudents = computed(() => 284)
-  const checkedInStudents = computed(() => 198)
-  const completedSteps = computed(() => checklistSteps.value.filter((s) => s.status === 'completed').length)
-  const completionRate = computed(() => Math.round((completedSteps.value / checklistSteps.value.length) * 100))
-  const allStepsCompleted = computed(() => completedSteps.value === checklistSteps.value.length)
-  const studentTimeline = computed(() =>
-    checklistSteps.value.map((step, i) => ({ ...step, order: i + 1, active: step.id === activeStepId.value }))
-  )
-
-  // Actions
-  function signIn() {
-    loggedIn.value = true
-    activeSection.value = 'overview'
-  }
-
-  function publishAnnouncement() {
-    announcements.value.unshift({
-      id: Date.now(),
-      title: announcementDraft.title,
-      audience: announcementDraft.audience,
-      publishedAt: 'Just now',
-      body: announcementDraft.body,
-      priority: announcementDraft.priority,
-    })
-    announcementDraft.title = 'Timeline Update'
-    announcementDraft.audience = 'All students'
-    announcementDraft.body = 'Please check the latest enrollment instructions before visiting campus.'
-    announcementDraft.priority = 'Standard'
-  }
-
-  function addChecklistStep() {
-    checklistSteps.value.push({
-      id: Date.now(),
-      title: `New Step ${checklistSteps.value.length + 1}`,
-      description: 'Define the next enrollment action or verification requirement.',
-      status: 'pending',
-    })
-  }
-
-  function toggleChecklistStatus(stepId: number) {
-    checklistSteps.value = checklistSteps.value.map((step) => {
-      if (step.id !== stepId) return step
-      const next: StepStatus = step.status === 'pending' ? 'in-review' : step.status === 'in-review' ? 'completed' : 'pending'
-      return { ...step, status: next }
-    })
-  }
-
-  function activateStep(stepId: number) {
-    activeStepId.value = stepId
-  }
-
-  function reserveSlot(slotId: number) {
-    appointmentSlots.value = appointmentSlots.value.map((slot) => {
-      if (slot.id !== slotId || slot.booked >= slot.capacity) return slot
-      return { ...slot, booked: slot.booked + 1 }
-    })
-  }
-
-  function getStepBadgeClass(status: StepStatus) {
-    if (status === 'completed') return 'badge--done'
-    if (status === 'in-review') return 'badge--progress'
-    return 'badge--pending'
-  }
-
   return {
-    // State
-    loggedIn, activeSection, activeStepId, loginForm,
-    checklistSteps, announcementDraft, announcements, appointmentSlots, selectedSlotId,
-    // Computed
-    activeSlot, totalStudents, checkedInStudents, completedSteps, completionRate, allStepsCompleted, studentTimeline,
-    // Actions
-    signIn, publishAnnouncement, addChecklistStep, toggleChecklistStatus, activateStep, reserveSlot, getStepBadgeClass,
+    // auth state
+    loggedIn,
+    loginForm,
+    loginError,
+    isLoading,
+    currentUserId,
+    currentUserName,
+
+    // navigation
+    activeSection,
+
+    // use case 2 — announcements
+    announcements,
+    announcementDraft,
+
+    // use case 1 — checklist
+    checklistSteps,
+    activeStepId,
+
+    // use case 3 — appointments
+    appointmentSlots,
+    selectedSlotId,
+
+    // computed
+    totalSteps,
+    completedSteps,
+    completionRate,
+    allStepsCompleted,
+    activeSlot,
+    studentTimeline,
+
+    // auth actions
+    signIn:         signInAction,
+    signOut:        signOutAction,
+    restoreSession,
+
+    // use case 2
+    publishAnnouncement,
+    loadAnnouncements,
+
+    // use case 1
+    addChecklistStep,
+    removeChecklistStep,
+    activateStep,
+    loadChecklistSteps,
+
+    // use case 3
+    setAppointmentSlot,
+    cancelSlot,
+    loadAppointmentSlots,
   }
 }

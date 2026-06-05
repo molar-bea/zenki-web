@@ -1,24 +1,24 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ChecklistStep, StepStatus } from '../types'
+import type { ChecklistStep } from '../types/database.types'
 
 const props = defineProps<{
   checklistSteps: ChecklistStep[]
-  activeStepId: number
+  activeStepId: string | null
   completionRate: number
-  studentTimeline: Array<{ id: number; order: number; title: string; status: string; active?: boolean }>
+  studentTimeline: Array<{ id: string; order: number; title: string; status: string; active?: boolean }>
 }>()
 
 const emit = defineEmits<{
   (e: 'add-step'): void
-  (e: 'activate-step', id: number): void
-  (e: 'toggle-status', id: number): void
+  (e: 'activate-step', id: string): void
+  (e: 'toggle-status', id: string): void
 }>()
 
 const activeStep = computed(() => props.checklistSteps.find((s) => s.id === props.activeStepId))
 const activeStepIndex = computed(() => props.checklistSteps.findIndex((s) => s.id === props.activeStepId) + 1)
 
-function getStepBadgeClass(status: StepStatus) {
+function getStepBadgeClass(status: ChecklistStep['status']) {
   if (status === 'completed') return 'badge-clean--done'
   if (status === 'in-review') return 'badge-clean--progress'
   return 'badge-clean--pending'
@@ -31,7 +31,6 @@ function padIndex(i: number) { return String(i).padStart(2, '0') }
     <h1 class="page-title">Checklist Configuration</h1>
 
     <div class="workspace-grid">
-      <!-- Builder (Left) -->
       <article class="clean-panel">
         <div class="panel__header">
           <h2>Enrollment Sequence</h2>
@@ -59,19 +58,37 @@ function padIndex(i: number) { return String(i).padStart(2, '0') }
         </div>
       </article>
 
-      <!-- Detail (Right) -->
       <article class="clean-panel">
-        <h2>{{ activeStep?.title }}</h2>
-        <p class="detail-copy">{{ activeStep?.description }}</p>
-        
-        <div class="timeline-clean">
-          <div v-for="step in studentTimeline" :key="step.id" class="timeline-item" :class="{ 'timeline-item--active': step.active }">
-            <span class="timeline-num">{{ step.order }}</span>
-            <div>
-              <strong>{{ step.title }}</strong>
-              <small>{{ step.status }}</small>
+        <div v-if="activeStep">
+          <h2>Add Requirement</h2>
+          
+          <div class="field field--dark">
+            <span>Title</span>
+            <input v-model="activeStep.title" type="text" />
+          </div>
+
+          <div class="field field--dark">
+            <span>Description</span>
+            <textarea v-model="activeStep.description" rows="4"></textarea>
+          </div>
+
+          <div class="date-row">
+            <div class="field field--dark">
+              <span>Start Date</span>
+              <input v-model="activeStep.startDate" type="date" />
+            </div>
+            <div class="field field--dark">
+              <span>End Date</span>
+              <input v-model="activeStep.endDate" type="date" />
             </div>
           </div>
+
+          <button class="btn--primary" style="margin-top: 1.5rem;">
+            Save changes
+          </button>
+        </div>
+        <div v-else>
+          <p class="detail-copy">Select a step to view details.</p>
         </div>
       </article>
     </div>
@@ -149,6 +166,13 @@ function padIndex(i: number) { return String(i).padStart(2, '0') }
 .badge-clean--done { background: #7A9E9F; color: #ffffff; }
 .badge-clean--progress { background: #B8D8D8; color: #191716; }
 .badge-clean--pending { background: #E0E2DB; color: #4F6367; }
+
+/* New date row style added here */
+.date-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
 
 .timeline-clean { margin-top: 2rem; display: flex; flex-direction: column; gap: 1rem; }
 .timeline-item { display: flex; gap: 1rem; align-items: center; opacity: 0.5; }
