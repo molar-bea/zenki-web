@@ -1,15 +1,34 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { supabase } from '../utils/supabase'
 import enrollmateLogo from '../assets/enrollmateLogo.png'
 
-const props = defineProps<{
-  loginForm: { username: string; password: string }
-}>()
+const router = useRouter()
 
-const emit = defineEmits<{
-  (e: 'sign-in'): void
-}>()
+const email = ref('')
+const password = ref('')
+const errorMessage = ref('')
+const isSubmitting = ref(false)
 
+const handleLogin = async () => {
+  errorMessage.value = ''
+  isSubmitting.value = true
+  
+  const { error } = await supabase.auth.signInWithPassword({
+    email: email.value,
+    password: password.value,
+  })
 
+  isSubmitting.value = false
+
+  if (error) {
+    errorMessage.value = error.message
+  } else {
+    // Route directly to the default protected child view.
+    await router.replace({ name: 'Overview' })
+  }
+}
 </script>
 
 <template>
@@ -19,16 +38,33 @@ const emit = defineEmits<{
         <img :src="enrollmateLogo" alt="EnrollMate logo" class="logo" />
         <h1>ENROLLMATE</h1>
       </div>
-      <div class = description >
+      <div class="description">
         <p class="eyebrow eyebrow--dark">Secure access</p>
         <h2>Administrator sign-in</h2>
       </div>
       
-      
-      <form class=" login-form" @submit.prevent="emit('sign-in')">
-        <input v-model="loginForm.username" type="text" placeholder="Username" />
-        <input v-model="loginForm.password" type="password" placeholder="Password" />
-        <button type="submit" class="btn-signin">Sign in</button>
+      <form class="login-form" @submit.prevent="handleLogin">
+        <!-- Swapped text/username field to type="email" bound to email ref -->
+        <input 
+          v-model="email" 
+          type="email" 
+          placeholder="Email address" 
+          required 
+        />
+        <input 
+          v-model="password" 
+          type="password" 
+          placeholder="Password" 
+          required 
+        />
+        
+        <!-- Added dynamic text/disabling when authenticating -->
+        <button type="submit" class="btn-signin" :disabled="isSubmitting">
+          {{ isSubmitting ? 'Signing in...' : 'Sign in' }}
+        </button>
+
+        <!-- Error feedback container styled to fit below button -->
+        <p v-if="errorMessage" class="error-msg">{{ errorMessage }}</p>
       </form>
     </div>
   </main>
@@ -64,7 +100,7 @@ const emit = defineEmits<{
 }
 
 .brand h1 {
-  font-family: 'Inter',sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 1.25rem;
   letter-spacing: 2px;
   margin: 0;
@@ -75,17 +111,18 @@ const emit = defineEmits<{
   display: flex;
   flex-direction: column;
   align-items: start;
-  font-family: 'Inter',sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 1.20rem;
   letter-spacing: 1px;
   margin: 0;
   color: var(--clr-ink);
+  width: 100%; /* Keeps alignment stable */
 }
 
-.description h2{
-
+.description h2 {
   font-family: var(--font-display);
   font-size: 1.5rem;
+  margin-top: 0.25rem;
 }
 
 .eyebrow {
@@ -94,6 +131,7 @@ const emit = defineEmits<{
   letter-spacing: 0.06em;
   margin-top: 1.5rem;
 }
+
 .login-form {
   width: 100%;
   display: flex;
@@ -122,11 +160,23 @@ const emit = defineEmits<{
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.2s;
+  width: 100%;
 }
 
-.btn-signin:hover {
+.btn-signin:hover:not(:disabled) {
   opacity: 0.9;
 }
 
+.btn-signin:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
+.error-msg {
+  color: #bf4343;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+  text-align: center;
+  font-weight: 500;
+}
 </style>
