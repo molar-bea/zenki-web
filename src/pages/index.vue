@@ -16,7 +16,6 @@ onMounted(() => store.restoreSession())
 
 <template>
   <div class="shell">
-    //Global toast notification
     <Transition name="toast">
       <div v-if="store.toastVisible" :class="['toast', store.toastType === 'error' ? 'toast--error' : 'toast--success']">
         <span class="toast-icon">{{ store.toastType === 'error' ? '✕' : '✓' }}</span>
@@ -39,10 +38,6 @@ onMounted(() => store.restoreSession())
       />
 
       <main class="dashboard__main">
-        <div v-if="store.allStepsCompleted" class="success-banner">
-          <strong>Congrats, the enrollment process is complete.</strong>
-          <span>Good luck with your journey!</span>
-        </div>
 
         <OverviewPage
           v-if="store.activeSection === 'overview'"
@@ -50,7 +45,7 @@ onMounted(() => store.restoreSession())
           :checklist-steps="store.checklistSteps"
           :completed-steps="store.completedSteps"
           :completion-rate="store.completionRate"
-          :appointment-slots="store.appointmentSlots"
+          :appointment-slots="store.appointmentSchedules"
           @go-announcements="() => (store.activeSection = 'announcements')"
         />
         <ChecklistPage
@@ -76,12 +71,6 @@ onMounted(() => store.restoreSession())
         />
         <AppointmentsPage
           v-else
-          :appointment-slots="store.appointmentSlots"
-          :selected-slot-id="store.selectedSlotId"
-          :active-slot="store.activeSlot"
-          @select-slot="(id) => (store.selectedSlotId = id as any)"
-          @set-slot="store.setAppointmentSlot"
-          @cancel-slot="store.cancelSlot"
         />
       </main>
     </section>

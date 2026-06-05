@@ -132,12 +132,19 @@ export interface AnnouncementDraft {
  * Represents a grouped headcount: one slot type + date + time = one card.
  * booked = how many students have this slot scheduled.
  */
-export interface AppointmentSlot {
-  id: string
-  label: string       // human-readable type e.g. "Campus Visit"
-  date: string        // e.g. "Jun 12, 2026"
-  time: string        // e.g. "09:00 AM"
-  requirement: string // program name
-  booked: number
+export type AdminAppointmentType = 'Medical Appointment' | 'Document Submission'
+
+export interface AppointmentScheduleDraft {
+  type: AdminAppointmentType
+  startDate: string 
+  endDate: string   
   capacity: number
+}
+
+export interface AppointmentScheduleView {
+  id: string
+  type: AdminAppointmentType
+  date: string
+  capacity: number
+  booked: number
 }
