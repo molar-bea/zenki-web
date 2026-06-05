@@ -21,21 +21,8 @@ export interface User {
   created_at: string
 }
 
-export interface Program {
-  id: string
-  name: string
-  description: string | null
-  department: string
-  slots_available: number
-  application_start_date: string
-  application_end_date: string
-  is_deleted: boolean
-  created_at: string
-}
-
 export interface Requirement {
   id: string
-  program_id: string
   user_id: string | null
   name: string
   description: string | null
@@ -77,11 +64,6 @@ export interface Database {
         Insert: Omit<User, 'id' | 'created_at'>
         Update: Partial<Omit<User, 'id' | 'created_at'>>
       }
-      program: {
-        Row: Program
-        Insert: Omit<Program, 'id' | 'created_at'>
-        Update: Partial<Omit<Program, 'id' | 'created_at'>>
-      }
       requirement: {
         Row: Requirement
         Insert: Omit<Requirement, 'id' | 'created_at'>
@@ -119,6 +101,7 @@ export interface ChecklistStep {
   description: string
   startDate: string | null
   endDate: string | null
+  is_mandatory: boolean
   step_order: number
   status: 'pending' | 'in-review' | 'completed'
 }
@@ -149,7 +132,6 @@ export interface AnnouncementDraft {
  * Use case 3 — Appointment slot card as shown in AppointmentsPage.
  * Represents a grouped headcount: one slot type + date + time = one card.
  * booked = how many students have this slot scheduled.
- * capacity = program.slots_available.
  */
 export interface AppointmentSlot {
   id: string

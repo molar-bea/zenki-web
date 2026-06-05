@@ -193,6 +193,7 @@ async function addChecklistStep() {
     name: `Step ${nextOrder}`,
     description: 'Describe this enrollment requirement.',
     stepOrder: nextOrder,
+    is_mandatory:true,
   }) // Removed programId and isMandatory
 
   checklistSteps.value.push(newStep)

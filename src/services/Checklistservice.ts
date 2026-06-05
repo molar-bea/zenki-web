@@ -8,6 +8,7 @@ function mapRow(row: any): ChecklistStep {
     description: row.description ?? '',
     startDate: row.start_date,
     endDate: row.end_date,
+    is_mandatory: row.is_mandatory,
     step_order: row.step_order,
     status: 'pending',
   }
@@ -16,7 +17,7 @@ function mapRow(row: any): ChecklistStep {
 export async function fetchChecklistSteps(): Promise<ChecklistStep[]> {
   const { data, error } = await (supabase as any)
     .from('requirement')
-    .select('id, name, description, start_date, end_date, step_order')
+    .select('id, name, description, start_date, end_date, step_order,is_mandatory')
     .eq('is_deleted', false)
     .order('step_order', { ascending: true })
 
@@ -30,6 +31,7 @@ export async function addChecklistStep(params: {
   startDate?: string
   endDate?: string
   stepOrder: number
+  is_mandatory: boolean
 }): Promise<ChecklistStep> {
   const { data, error } = await (supabase as any)
     .from('requirement')
@@ -39,9 +41,10 @@ export async function addChecklistStep(params: {
       start_date: params.startDate ?? null,
       end_date: params.endDate ?? null,
       step_order: params.stepOrder,
+      is_mandatory: params.is_mandatory,
       is_deleted: false,
     } as any)
-    .select('id, name, description, start_date, end_date, step_order')
+    .select('id, name, description, start_date, end_date, step_order, is_mandatory')
     .single()
 
   if (error) throw new Error(error.message)
@@ -53,6 +56,7 @@ export async function updateChecklistStep(params: {
   name?: string
   description?: string
   startDate?: string
+  is_mandatory?: boolean
   endDate?: string
 }): Promise<void> {
   const { error } = await (supabase as any)
@@ -62,6 +66,7 @@ export async function updateChecklistStep(params: {
       ...(params.description !== undefined && { description: params.description }),
       ...(params.startDate !== undefined && { start_date: params.startDate }),
       ...(params.endDate !== undefined && { end_date: params.endDate }),
+      ...(params.is_mandatory !== undefined && { is_mandatory: params.is_mandatory }),
     } as any)
     .eq('id', params.requirementId)
 
