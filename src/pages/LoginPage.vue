@@ -4,31 +4,15 @@ import { useRouter } from 'vue-router'
 import { supabase } from '../utils/supabase'
 import enrollmateLogo from '../assets/enrollmateLogo.png'
 
-const router = useRouter()
+const props = defineProps<{
+  loginForm: { email: string; password: string }
+}>()
 
-const email = ref('')
-const password = ref('')
-const errorMessage = ref('')
-const isSubmitting = ref(false)
+const emit = defineEmits<{
+  (e: 'sign-in'): void
+}>()
 
-const handleLogin = async () => {
-  errorMessage.value = ''
-  isSubmitting.value = true
-  
-  const { error } = await supabase.auth.signInWithPassword({
-    email: email.value,
-    password: password.value,
-  })
 
-  isSubmitting.value = false
-
-  if (error) {
-    errorMessage.value = error.message
-  } else {
-    // Route directly to the default protected child view.
-    await router.replace({ name: 'Overview' })
-  }
-}
 </script>
 
 <template>
@@ -43,28 +27,11 @@ const handleLogin = async () => {
         <h2>Administrator sign-in</h2>
       </div>
       
-      <form class="login-form" @submit.prevent="handleLogin">
-        <!-- Swapped text/username field to type="email" bound to email ref -->
-        <input 
-          v-model="email" 
-          type="email" 
-          placeholder="Email address" 
-          required 
-        />
-        <input 
-          v-model="password" 
-          type="password" 
-          placeholder="Password" 
-          required 
-        />
-        
-        <!-- Added dynamic text/disabling when authenticating -->
-        <button type="submit" class="btn-signin" :disabled="isSubmitting">
-          {{ isSubmitting ? 'Signing in...' : 'Sign in' }}
-        </button>
-
-        <!-- Error feedback container styled to fit below button -->
-        <p v-if="errorMessage" class="error-msg">{{ errorMessage }}</p>
+      
+      <form class=" login-form" @submit.prevent="emit('sign-in')">
+        <input v-model="loginForm.email" type="email" placeholder="Email" />
+        <input v-model="loginForm.password" type="password" placeholder="Password" />
+        <button type="submit" class="btn-signin">Sign in</button>
       </form>
     </div>
   </main>

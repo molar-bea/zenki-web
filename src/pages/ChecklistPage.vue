@@ -1,164 +1,913 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { ChecklistStep, StepStatus } from '../types'
+import { ref, computed, onMounted, watch } from 'vue'
+import { supabase } from '../lib/supabase'
+import { useEnrollStore } from '../composables/useEnrollStore'
 
-const props = defineProps<{
-  checklistSteps: ChecklistStep[]
-  activeStepId: number
-  completionRate: number
-  studentTimeline: Array<{ id: number; order: number; title: string; status: string; active?: boolean }>
-}>()
+const store = useEnrollStore()
 
-const emit = defineEmits<{
-  (e: 'add-step'): void
-  (e: 'activate-step', id: number): void
-  (e: 'toggle-status', id: number): void
-}>()
-
-const activeStep = computed(() => props.checklistSteps.find((s) => s.id === props.activeStepId))
-const activeStepIndex = computed(() => props.checklistSteps.findIndex((s) => s.id === props.activeStepId) + 1)
-
-function getStepBadgeClass(status: StepStatus) {
-  if (status === 'completed') return 'badge-clean--done'
-  if (status === 'in-review') return 'badge-clean--progress'
-  return 'badge-clean--pending'
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface RequirementRow {
+  id: string
+  user_id: string | null
+  name: string
+  description: string | null
+  start_date: string | null
+  end_date: string | null
+  is_mandatory: boolean
+  is_deleted: boolean
+  created_at: string
+  step_order: number
 }
+
+// ─── State ────────────────────────────────────────────────────────────────────
+const requirements  = ref<RequirementRow[]>([])
+const isLoading     = ref(false)
+const isSaving      = ref(false)
+const isDeleting    = ref<string | null>(null)
+const editingId     = ref<string | null>(null)   // null = new, string = editing existing
+
+// Form state
+const form = ref({
+  name: '',
+  description: '',
+  start_date: '',
+  end_date: '',
+  is_mandatory: true,
+  step_order: 1,
+})
+
+// Sorting
+const sortKey = ref<'step_order' | 'name' | 'start_date'>('step_order')
+
+// ─── Computed ─────────────────────────────────────────────────────────────────
+const sortedRequirements = computed(() => {
+  return [...requirements.value].sort((a, b) => {
+    if (sortKey.value === 'step_order') return a.step_order - b.step_order
+    if (sortKey.value === 'name') return a.name.localeCompare(b.name)
+    if (sortKey.value === 'start_date') {
+      const da = a.start_date ?? ''
+      const db = b.start_date ?? ''
+      return da.localeCompare(db)
+    }
+    return 0
+  })
+})
+
+const formTitle  = computed(() => editingId.value ? 'Edit Requirement' : 'Add Requirement')
+const isEditing  = computed(() => editingId.value !== null)
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function formatDate(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
 function padIndex(i: number) { return String(i).padStart(2, '0') }
+
+function resetForm() {
+  editingId.value = null
+  form.value = { name: '', description: '', start_date: '', end_date: '', is_mandatory: true, step_order: requirements.value.length + 1 }
+}
+
+function startEdit(req: RequirementRow) {
+  editingId.value      = req.id
+  form.value.name        = req.name
+  form.value.description = req.description ?? ''
+  form.value.start_date  = req.start_date  ?? ''
+  form.value.end_date    = req.end_date    ?? ''
+  form.value.is_mandatory = req.is_mandatory
+  form.value.step_order   = req.step_order
+  // Scroll form into view on mobile
+  document.querySelector('.form-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+// ─── Supabase CRUD ────────────────────────────────────────────────────────────
+async function fetchRequirements() {
+  isLoading.value = true
+  try {
+    const { data, error } = await supabase
+      .from('requirement')
+      .select('*')
+      .eq('is_deleted', false)
+      .order('step_order', { ascending: true })
+
+    if (error) throw error
+    requirements.value = data as RequirementRow[]
+  } catch (err: any) {
+    store.showToast(err.message ?? 'Failed to fetch requirements.', 'error')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function saveRequirement() {
+  if (!form.value.name.trim()) {
+    store.showToast('Requirement name is required.', 'error')
+    return
+  }
+
+  isSaving.value = true
+  try {
+    if (isEditing.value) {
+      // UPDATE existing
+      const { error } = await (supabase as any)
+        .from('requirement')
+        .update({
+          name:         form.value.name.trim(),
+          description:  form.value.description.trim() || null,
+          start_date:   form.value.start_date  || null,
+          end_date:     form.value.end_date    || null,
+          is_mandatory: form.value.is_mandatory,
+          step_order:   form.value.step_order,
+        })
+        .eq('id', editingId.value!)
+
+      if (error) throw error
+      store.showToast('Requirement updated successfully.')
+    } else {
+      const { error } = await ( supabase as any)
+        .from('requirement')
+        .insert({
+          name:         form.value.name.trim(),
+          description:  form.value.description.trim() || null,
+          start_date:   form.value.start_date  || null,
+          end_date:     form.value.end_date    || null,
+          is_mandatory: form.value.is_mandatory,
+          step_order:   form.value.step_order,
+          is_deleted:   false,
+          user_id:      null,
+        })
+
+      if (error) throw error
+      store.showToast('Requirement added successfully.')
+    }
+
+    resetForm()
+    await fetchRequirements()
+  } catch (err: any) {
+    store.showToast(err.message ?? 'Failed to save requirement.', 'error')
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function deleteRequirement(id: string) {
+  if (!confirm('Delete this requirement? This cannot be undone.')) return
+  isDeleting.value = id
+  try {
+    const { error } = await ( supabase as any )
+      .from('requirement')
+      .update({ is_deleted: true })
+      .eq('id', id)
+
+    if (error) throw error
+    store.showToast('Requirement removed.')
+    if (editingId.value === id) resetForm()
+    await fetchRequirements()
+  } catch (err: any) {
+    store.showToast(err.message ?? 'Failed to delete requirement.', 'error')
+  } finally {
+    isDeleting.value = null
+  }
+}
+
+// ─── Lifecycle ────────────────────────────────────────────────────────────────
+onMounted(() => {
+  fetchRequirements()
+})
+
+// Keep default step_order in sync with list length when resetting
+watch(requirements, (list) => {
+  if (!isEditing.value) form.value.step_order = list.length + 1
+})
 </script>
 
 <template>
-  <section class="clean-view">
-    <h1 class="page-title">Checklist Configuration</h1>
+  <section class="checklist-view">
+    <!-- Page header -->
+    <div class="page-header">
+      <div>
+        <p class="page-eyebrow">Admin · Enrollment Config</p>
+        <h1 class="page-title">Checklist Configuration</h1>
+      </div>
+      <div class="header-meta">
+        <span class="req-count">{{ requirements.length }} requirement{{ requirements.length !== 1 ? 's' : '' }}</span>
+      </div>
+    </div>
 
     <div class="workspace-grid">
-      <!-- Builder (Left) -->
-      <article class="clean-panel">
-        <div class="panel__header">
-          <h2>Enrollment Sequence</h2>
-          <button class="btn-flat" type="button" @click="emit('add-step')">+ Add step</button>
-        </div>
-        <div class="step-list">
-          <button
-            v-for="(step, index) in checklistSteps"
-            :key="step.id"
-            type="button"
-            class="step-card-clean"
-            :class="{ 'step-card-clean--active': step.id === activeStepId }"
-            @click="emit('activate-step', step.id)"
-          >
-            <div class="step-index">{{ padIndex(index + 1) }}</div>
-            <div class="step-content">
-              <div class="step-row">
-                <strong>{{ step.title }}</strong>
-                <span class="badge-clean" :class="getStepBadgeClass(step.status)">{{ step.status }}</span>
-              </div>
-              <p>{{ step.description }}</p>
-            </div>
-            <span class="step-action" @click.stop="emit('toggle-status', step.id)">Toggle</span>
-          </button>
-        </div>
-      </article>
 
-      <!-- Detail (Right) -->
-      <article class="clean-panel">
-        <h2>{{ activeStep?.title }}</h2>
-        <p class="detail-copy">{{ activeStep?.description }}</p>
-        
-        <div class="timeline-clean">
-          <div v-for="step in studentTimeline" :key="step.id" class="timeline-item" :class="{ 'timeline-item--active': step.active }">
-            <span class="timeline-num">{{ step.order }}</span>
-            <div>
-              <strong>{{ step.title }}</strong>
-              <small>{{ step.status }}</small>
+      <!-- ── LEFT: Enrollment Sequence ───────────────────────────────────────── -->
+      <article class="panel left-panel">
+        <div class="panel__header">
+          <div>
+            <p class="panel-eyebrow">Enrollment Sequence</p>
+            <h2 class="panel-title">Added Requirements</h2>
+          </div>
+          <div class="sort-control">
+            <label class="sort-label" for="sort-sel">Sort</label>
+            <select id="sort-sel" v-model="sortKey" class="sort-select">
+              <option value="step_order">By order</option>
+              <option value="name">By name</option>
+              <option value="start_date">By date</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Loading skeleton -->
+        <div v-if="isLoading" class="skeleton-list">
+          <div v-for="n in 3" :key="n" class="skeleton-card"></div>
+        </div>
+
+        <!-- Empty state -->
+        <div v-else-if="sortedRequirements.length === 0" class="empty-state">
+          <div class="empty-icon">📋</div>
+          <p class="empty-title">No added requirements on the list</p>
+          <p class="empty-sub">Use the form on the right to add your first enrollment requirement.</p>
+        </div>
+
+        <!-- Requirements list -->
+        <div v-else class="req-list">
+          <div
+            v-for="(req, index) in sortedRequirements"
+            :key="req.id"
+            class="req-card"
+            :class="{ 'req-card--editing': editingId === req.id }"
+          >
+            <div class="req-card__index">
+              <span>{{ padIndex(req.step_order) }}</span>
+            </div>
+
+            <div class="req-card__body">
+              <div class="req-card__top">
+                <strong class="req-name">{{ req.name }}</strong>
+                <span :class="['mandatory-badge', req.is_mandatory ? 'mandatory-badge--yes' : 'mandatory-badge--no']">
+                  {{ req.is_mandatory ? 'Mandatory' : 'Optional' }}
+                </span>
+              </div>
+
+              <p v-if="req.description" class="req-desc">{{ req.description }}</p>
+
+              <div class="req-dates">
+                <div class="date-chip">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                  <span>Start: {{ formatDate(req.start_date) }}</span>
+                </div>
+                <div class="date-chip">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                  <span>End: {{ formatDate(req.end_date) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="req-card__actions">
+              <button
+                class="action-btn action-btn--edit"
+                type="button"
+                title="Edit requirement"
+                @click="startEdit(req)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Edit
+              </button>
+              <button
+                class="action-btn action-btn--delete"
+                type="button"
+                title="Delete requirement"
+                :disabled="isDeleting === req.id"
+                @click="deleteRequirement(req.id)"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                {{ isDeleting === req.id ? '…' : 'Delete' }}
+              </button>
             </div>
           </div>
         </div>
       </article>
+
+      <!-- ── RIGHT: Add / Edit Requirement Form ──────────────────────────────── -->
+      <article class="panel form-panel">
+        <div class="form-header">
+          <div class="form-header__left">
+            <div class="form-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <circle cx="12" cy="12" r="10"/>
+                <path v-if="!isEditing" d="M12 8v8M8 12h8"/>
+                <path v-else d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              </svg>
+            </div>
+            <div>
+              <p class="panel-eyebrow">Requirement Builder</p>
+              <h2 class="panel-title">{{ formTitle }}</h2>
+            </div>
+          </div>
+          <button
+            v-if="isEditing"
+            class="cancel-btn"
+            type="button"
+            @click="resetForm"
+          >
+            Cancel
+          </button>
+        </div>
+
+        <div class="form-body">
+          <!-- Name -->
+          <div class="form-group">
+            <label class="form-label" for="req-name">
+              Requirement Name <span class="required-dot">*</span>
+            </label>
+            <input
+              id="req-name"
+              v-model="form.name"
+              type="text"
+              class="form-input"
+              placeholder="e.g. Submit Transcript, Medical Certificate…"
+            />
+          </div>
+
+          <!-- Description -->
+          <div class="form-group">
+            <label class="form-label" for="req-desc">Description</label>
+            <textarea
+              id="req-desc"
+              v-model="form.description"
+              class="form-input form-textarea"
+              rows="3"
+              placeholder="Provide additional context or instructions for students…"
+            ></textarea>
+          </div>
+
+          <!-- Dates row -->
+          <div class="form-dates-row">
+            <div class="form-group">
+              <label class="form-label" for="req-start">Start Date</label>
+              <div class="date-input-wrap">
+                <svg class="date-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                <input
+                  id="req-start"
+                  v-model="form.start_date"
+                  type="date"
+                  class="form-input date-input"
+                />
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="req-end">End Date</label>
+              <div class="date-input-wrap">
+                <svg class="date-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                <input
+                  id="req-end"
+                  v-model="form.end_date"
+                  type="date"
+                  class="form-input date-input"
+                />
+              </div>
+            </div>
+          </div>
+
+          <!-- Step order + Mandatory row -->
+          <div class="form-dates-row">
+            <div class="form-group">
+              <label class="form-label" for="req-order">Step Order</label>
+              <input
+                id="req-order"
+                v-model.number="form.step_order"
+                type="number"
+                class="form-input"
+                min="1"
+                placeholder="1"
+              />
+            </div>
+            <div class="form-group">
+              <label class="form-label">Requirement Type</label>
+              <div class="toggle-row">
+                <button
+                  type="button"
+                  :class="['toggle-chip', form.is_mandatory ? 'toggle-chip--active' : '']"
+                  @click="form.is_mandatory = true"
+                >Mandatory</button>
+                <button
+                  type="button"
+                  :class="['toggle-chip', !form.is_mandatory ? 'toggle-chip--active toggle-chip--optional' : '']"
+                  @click="form.is_mandatory = false"
+                >Optional</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Save button -->
+          <button
+            class="save-btn"
+            type="button"
+            :disabled="isSaving"
+            @click="saveRequirement"
+          >
+            <svg v-if="!isSaving" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="spin"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            {{ isSaving ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Requirement' }}
+          </button>
+        </div>
+      </article>
+
     </div>
   </section>
 </template>
 
 <style scoped>
-.clean-view { display: flex; flex-direction: column; gap: 2rem; }
+/* ── Layout ─────────────────────────────────────────────────────────────────── */
+.checklist-view {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  padding: 0 1rem 2rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.page-eyebrow {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--clr-slate);
+  font-weight: 600;
+}
+
 .page-title {
-  font-family: 'Inter', system-ui, sans-serif;
+  margin: 0;
+  font-family: var(--font-display);
   font-size: 2.2rem;
   font-weight: 800;
-  color: #191716;
-  margin: 0;
+  color: var(--clr-ink);
+  letter-spacing: -0.02em;
 }
+
+.header-meta { display: flex; align-items: center; gap: 0.75rem; }
+
+.req-count {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--clr-stone);
+  background: var(--clr-fog);
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--radius-pill);
+}
+
+/* ── Grid ───────────────────────────────────────────────────────────────────── */
 .workspace-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2rem;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 1.5rem;
+  align-items: start;
 }
-.clean-panel {
-  background: #ffffff;
-  border: 1px solid #7A9E9F;
-  border-radius: 12px;
-  padding: 1.5rem;
+
+/* ── Panels ─────────────────────────────────────────────────────────────────── */
+.panel {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--clr-slate);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
+
+.left-panel { padding: 1.5rem; }
+
 .panel__header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  align-items: center;
+  gap: 1rem;
   margin-bottom: 1.5rem;
 }
-.panel__header h2 { margin: 0; font-size: 1.2rem; color: #191716; }
-.btn-flat {
-  background: #4F6367;
-  color: #E0E2DB;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
+
+.panel-eyebrow {
+  margin: 0 0 0.25rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--clr-slate);
   font-weight: 600;
-  cursor: pointer;
 }
-.step-list { display: flex; flex-direction: column; gap: 1rem; }
-.step-card-clean {
+
+.panel-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--clr-ink);
+  letter-spacing: -0.02em;
+}
+
+/* ── Sort control ───────────────────────────────────────────────────────────── */
+.sort-control { display: flex; align-items: center; gap: 0.5rem; }
+
+.sort-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--clr-stone);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.sort-select {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--clr-stone);
+  background: var(--clr-fog);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  padding: 0.35rem 0.7rem;
+  outline: none;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.sort-select:hover { background: var(--clr-mist); }
+
+/* ── Skeleton loader ────────────────────────────────────────────────────────── */
+.skeleton-list { display: flex; flex-direction: column; gap: 0.85rem; }
+
+.skeleton-card {
+  height: 80px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--clr-fog) 25%, var(--clr-mist) 50%, var(--clr-fog) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Empty state ────────────────────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2.5rem 1rem;
+  gap: 0.5rem;
+}
+
+.empty-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  opacity: 0.6;
+}
+
+.empty-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--clr-stone);
+}
+
+.empty-sub {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--clr-slate);
+  line-height: 1.5;
+  max-width: 22ch;
+}
+
+/* ── Requirement cards ──────────────────────────────────────────────────────── */
+.req-list { display: flex; flex-direction: column; gap: 0.85rem; }
+
+.req-card {
   display: grid;
-  grid-template-columns: 40px 1fr auto;
+  grid-template-columns: 44px 1fr auto;
   gap: 1rem;
+  align-items: start;
   padding: 1rem;
+  border-radius: var(--radius-sm);
+  background: #fafafa;
+  border: 1px solid var(--clr-fog);
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.req-card:hover {
+  border-color: var(--clr-slate);
+  box-shadow: var(--shadow-subtle);
+}
+
+.req-card--editing {
+  border-color: var(--clr-stone);
   background: #ffffff;
-  border: 1px solid #E0E2DB;
-  border-radius: 8px;
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(122, 158, 159, 0.15);
 }
-.step-card-clean:hover { border-color: #7A9E9F; }
-.step-card-clean--active {
-  border-color: #4F6367;
-  background: rgba(184, 216, 216, 0.2); /* Soft #B8D8D8 */
-}
-.step-index {
-  background: #E0E2DB;
-  color: #191716;
+
+.req-card__index {
   display: grid;
   place-items: center;
-  border-radius: 6px;
-  font-weight: bold;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--clr-fog);
+  flex-shrink: 0;
 }
-.step-row { display: flex; justify-content: space-between; margin-bottom: 0.25rem; }
-.step-row strong { color: #191716; }
-.step-content p { margin: 0; font-size: 0.85rem; color: rgba(25, 23, 22, 0.7); }
-.step-action { color: #7A9E9F; font-size: 0.8rem; font-weight: 600; }
 
-.badge-clean { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px; text-transform: uppercase; font-weight: 700; }
-.badge-clean--done { background: #7A9E9F; color: #ffffff; }
-.badge-clean--progress { background: #B8D8D8; color: #191716; }
-.badge-clean--pending { background: #E0E2DB; color: #4F6367; }
-
-.timeline-clean { margin-top: 2rem; display: flex; flex-direction: column; gap: 1rem; }
-.timeline-item { display: flex; gap: 1rem; align-items: center; opacity: 0.5; }
-.timeline-item--active { opacity: 1; }
-.timeline-num {
-  width: 32px; height: 32px;
-  background: #E0E2DB;
-  color: #4F6367;
-  display: grid; place-items: center;
-  border-radius: 50%; font-weight: bold;
+.req-card__index span {
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--clr-stone);
+  font-family: var(--font-display);
 }
-.timeline-item strong { color: #191716; }
+
+.req-card__body { display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; }
+
+.req-card__top {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.req-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--clr-ink);
+  line-height: 1.3;
+}
+
+.mandatory-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+
+.mandatory-badge--yes {
+  background: rgba(122, 158, 159, 0.15);
+  color: var(--clr-stone);
+}
+
+.mandatory-badge--no {
+  background: var(--clr-fog);
+  color: var(--clr-stone);
+}
+
+.req-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--clr-stone);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.req-dates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.date-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--clr-stone);
+  font-weight: 600;
+  background: var(--clr-fog);
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-pill);
+}
+
+/* ── Card action buttons ─────────────────────────────────────────────────────── */
+.req-card__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-pill);
+  border: none;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.action-btn:hover { transform: translateY(-1px); }
+.action-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.action-btn--edit {
+  background: var(--clr-fog);
+  color: var(--clr-stone);
+}
+.action-btn--edit:hover { background: var(--clr-mist); }
+
+.action-btn--delete {
+  background: rgba(211, 47, 47, 0.05);
+  color: #d32f2f;
+  border: 1px solid transparent;
+}
+.action-btn--delete:hover {
+  background: rgba(211, 47, 47, 0.12);
+}
+
+/* ── Form panel ─────────────────────────────────────────────────────────────── */
+.form-panel {
+  background: #ffffff; /* Strip the dark background */
+  padding: 0;
+}
+
+.form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--clr-fog);
+}
+
+.form-header__left { display: flex; align-items: center; gap: 0.9rem; }
+
+.form-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--clr-fog);
+  color: var(--clr-stone);
+  flex-shrink: 0;
+}
+
+.form-panel .panel-eyebrow { color: var(--clr-slate); }
+.form-panel .panel-title   { color: var(--clr-ink); }
+
+.cancel-btn {
+  padding: 0.45rem 1rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--clr-mist);
+  background: transparent;
+  color: var(--clr-stone);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.cancel-btn:hover {
+  background: var(--clr-fog);
+  color: var(--clr-ink);
+}
+
+/* ── Form body ──────────────────────────────────────────────────────────────── */
+.form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.5rem;
+}
+
+.form-group { display: flex; flex-direction: column; gap: 0.45rem; }
+
+.form-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--clr-stone);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.required-dot { color: #e87b7b; margin-left: 2px; }
+
+.form-input {
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--clr-mist);
+  background: #fcfcfc;
+  color: var(--clr-ink);
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color var(--transition);
+  font-family: inherit;
+}
+
+.form-input::placeholder { color: #a0a0a0; }
+
+.form-input:focus { border-color: var(--clr-stone); }
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.55;
+}
+
+/* Date input with icon */
+.date-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.date-icon {
+  position: absolute;
+  left: 0.85rem;
+  color: var(--clr-slate);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.date-input { padding-left: 2.2rem; }
+/* Removed the filter invert rule so the calendar picker is visible on light themes */
+.date-input::-webkit-calendar-picker-indicator { cursor: pointer; }
+
+.form-dates-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+/* Toggle chips */
+.toggle-row { display: flex; gap: 0.5rem; }
+
+.toggle-chip {
+  flex: 1;
+  padding: 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--clr-mist);
+  background: #fcfcfc;
+  color: var(--clr-slate);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.toggle-chip:hover { background: var(--clr-fog); color: var(--clr-stone); }
+
+.toggle-chip--active {
+  background: var(--clr-stone);
+  color: #ffffff;
+  border-color: var(--clr-stone);
+}
+
+.toggle-chip--optional.toggle-chip--active {
+  background: var(--clr-slate);
+  color: #ffffff;
+  border-color: var(--clr-slate);
+}
+
+/* ── Save button ────────────────────────────────────────────────────────────── */
+.save-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.95rem 1.4rem;
+  margin-top: 0.5rem;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--clr-stone);
+  color: var(--clr-fog);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity var(--transition);
+}
+
+.save-btn:hover:not(:disabled) { opacity: 0.9; }
+.save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* ── Spinner ────────────────────────────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.9s linear infinite; }
+
+/* ── Responsive ─────────────────────────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .workspace-grid { grid-template-columns: 1fr; }
+  .form-panel { order: -1; }
+}
+
+@media (max-width: 720px) {
+  .page-title  { font-size: 1.6rem; }
+  .form-dates-row { grid-template-columns: 1fr; }
+  .req-card   { grid-template-columns: 40px 1fr; }
+  .req-card__actions { flex-direction: row; grid-column: 1 / -1; }
+}
 </style>

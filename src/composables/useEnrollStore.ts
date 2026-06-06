@@ -1,118 +1,275 @@
-import { computed, reactive, ref } from 'vue'
-import type { Announcement, AnnouncementPriority, AppointmentSlot, ChecklistStep, StepStatus } from '../types'
+import { ref, computed } from 'vue'
+import { signIn, signOut, getSession, fetchUserProfile } from '../services/Authservice'
+import { fetchAnnouncements, publishAnnouncement as publishAnnouncementService, updateAnnouncement as updateAnnouncementService, toggleAnnouncementPin, retractAnnouncement } from '../services/Announcementservice'
+import { fetchChecklistSteps, addChecklistStep as addStepService, deleteChecklistStep } from '../services/Checklistservice'
+import { fetchSchedules, openScheduleDay, deleteScheduleDay,updateScheduleCapacity as updateCapacityService } from '../services/Appointmentservice'
+import type {
+  AnnouncementView,
+  AnnouncementDraft,
+  ChecklistStep,
+  AppointmentScheduleView,
+  AppointmentScheduleDraft
+} from '../types/database.types'
 
-export function useEnrollStore() {
-  const loggedIn = ref(false)
-  const activeSection = ref('overview')
-  const activeStepId = ref(1)
+// ─── Auth state ───
+const loggedIn       = ref(false)
+const currentUserId  = ref<string | null>(null)
+const currentUserName = ref<string>('Admin')
+const loginError     = ref<string | null>(null)
+const isLoading      = ref(false)
+const loginForm      = ref({ email: '', password: '' })
+const activeSection  = ref<'overview' | 'checklist' | 'announcements' | 'appointments'>('overview')
 
-  const loginForm = reactive({
-    username: 'Administrator1',
-    password: '',
+// ─── Global UI State (Toast & Confirm Modal) ───
+const toastMsg     = ref('')
+const toastType    = ref<'success' | 'error'>('success')
+const toastVisible = ref(false)
+
+function showToast(msg: string, type: 'success' | 'error' = 'success') {
+  toastMsg.value     = msg
+  toastType.value    = type
+  toastVisible.value = true
+  setTimeout(() => { toastVisible.value = false }, 3500)
+}
+
+const confirmDialog = ref({
+  isOpen: false,
+  message: '',
+  onConfirm: () => {}
+})
+
+function requestConfirm(message: string, onConfirm: () => void) {
+    if (window.confirm(message)) {
+      onConfirm()
+    }
+  }
+
+function cancelConfirm() {
+  confirmDialog.value.isOpen = false
+}
+
+// ─── Announcements ───
+const announcements = ref<AnnouncementView[]>([])
+const announcementDraft = ref<AnnouncementDraft>({ title: '', body: '', priority: 'Standard' })
+const editingAnnouncementId = ref<string | null>(null)
+
+async function loadAnnouncements() { announcements.value = await fetchAnnouncements() }
+
+function startEditAnnouncement(a: AnnouncementView) {
+  editingAnnouncementId.value = a.id
+  announcementDraft.value = { title: a.title, body: a.body, priority: a.priority }
+  document.querySelector('.clean-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function cancelEditAnnouncement() {
+  editingAnnouncementId.value = null
+  announcementDraft.value = { title: '', body: '', priority: 'Standard' }
+}
+
+async function publishAnnouncement() {
+  if (!currentUserId.value) return
+  if (!announcementDraft.value.title.trim() || !announcementDraft.value.body.trim()) {
+    showToast('Both the Announcement Title and Message Body are required.', 'error')
+    return 
+  }
+  try {
+    if (editingAnnouncementId.value) {
+      await updateAnnouncementService(editingAnnouncementId.value, announcementDraft.value)
+      showToast('Announcement updated successfully!', 'success')
+    } else {
+      await publishAnnouncementService(announcementDraft.value, currentUserId.value)
+      showToast('Announcement published successfully!', 'success')
+    }
+    cancelEditAnnouncement()
+    await loadAnnouncements()
+  } catch (error: any) {
+    showToast(error.message || 'Failed to save the announcement.', 'error')
+  }
+}
+
+function deleteAnnouncement(id: string) {
+  requestConfirm('Are you sure you want to delete this announcement?', async () => {
+    try {
+      await retractAnnouncement(id)
+      showToast('Announcement removed.', 'success')
+      if (editingAnnouncementId.value === id) cancelEditAnnouncement()
+      await loadAnnouncements()
+    } catch (error: any) {
+      showToast(error.message || 'Failed to delete announcement.', 'error')
+    }
   })
+}
 
-  const checklistSteps = ref<ChecklistStep[]>([
-    { id: 1, title: 'Pass Documents', description: 'Review original copies, admission forms, and supporting records.', status: 'completed' },
-    { id: 2, title: 'Medical Exam', description: 'Queue the student for physical screening and health clearance.', status: 'in-review' },
-    { id: 3, title: 'Payment Confirmation', description: 'Verify tuition and enrollment fees before final approval.', status: 'pending' },
-    { id: 4, title: 'Orientation Release', description: 'Unlock the final clearance and send the completion notice.', status: 'pending' },
-  ])
+async function togglePin(announcementId: string, currentPinState: boolean) {
+  try {
+    await toggleAnnouncementPin(announcementId, currentPinState)
+    await loadAnnouncements()
+  } catch (error: any) {
+    showToast(error.message || 'Failed to toggle pin.', 'error')
+  }
+}
 
-  const announcementDraft = reactive({
-    title: 'Exam Schedule Timeline',
-    audience: 'All enrolled students',
-    body: 'The medical exam queue opens at 8:00 AM. Bring valid ID, payment receipt, and completed forms.',
-    priority: 'High priority' as AnnouncementPriority,
+// ─── Checklist configuration ───
+const checklistSteps = ref<ChecklistStep[]>([])
+const activeStepId   = ref<string | null>(null)
+
+const totalSteps = computed(() => checklistSteps.value.length)
+const completedSteps = computed(() => checklistSteps.value.filter((s) => s.status === 'completed').length)
+const completionRate = computed(() => totalSteps.value === 0 ? 0 : Math.round((completedSteps.value / totalSteps.value) * 100))
+const allStepsCompleted = computed(() => totalSteps.value > 0 && completedSteps.value === totalSteps.value)
+
+const studentTimeline = computed(() =>
+  checklistSteps.value.map((s, i) => ({
+    id: s.id, order: i + 1, title: s.title, status: s.status, active: s.id === activeStepId.value,
+  }))
+)
+
+async function loadChecklistSteps() {
+  checklistSteps.value = await fetchChecklistSteps()
+  if (checklistSteps.value.length > 0 && !activeStepId.value) activeStepId.value = checklistSteps.value[0]!.id
+}
+
+function activateStep(id: string) { activeStepId.value = id }
+
+async function addChecklistStep() {
+  const nextOrder = checklistSteps.value.length + 1
+  const newStep = await addStepService({
+    name: `Step ${nextOrder}`, description: 'Describe this enrollment requirement.',
+    stepOrder: nextOrder, is_mandatory: true,
   })
+  checklistSteps.value.push(newStep)
+  activeStepId.value = newStep.id
+}
 
-  const announcements = ref<Announcement[]>([
-    { id: 1, title: 'Medical Requirements Updated', audience: 'Incoming freshmen', publishedAt: 'Today, 08:20 AM', body: 'The clinic now requires one printed copy of the updated physical form before screening.', priority: 'High priority' },
-    { id: 2, title: 'Enrollment Window Reminder', audience: 'All students', publishedAt: 'Yesterday, 04:40 PM', body: 'Enrollment verification closes at 5:00 PM every Friday to keep the campus queue manageable.', priority: 'Standard' },
-  ])
+function removeChecklistStep(stepId: string) {
+  requestConfirm('Delete this requirement? This cannot be undone.', async () => {
+    await deleteChecklistStep(stepId)
+    checklistSteps.value = checklistSteps.value.filter((s) => s.id !== stepId)
+    if (activeStepId.value === stepId) activeStepId.value = checklistSteps.value[0]?.id ?? null
+  })
+}
 
-  const appointmentSlots = ref<AppointmentSlot[]>([
-    { id: 1, label: 'Document Submission', date: 'June 8', time: '09:00 AM - 10:30 AM', requirement: 'Pass Documents', booked: 18, capacity: 24 },
-    { id: 2, label: 'Medical Screening', date: 'June 8', time: '11:00 AM - 01:00 PM', requirement: 'Medical Exam', booked: 12, capacity: 18 },
-    { id: 3, label: 'Cashier Review', date: 'June 9', time: '09:30 AM - 11:30 AM', requirement: 'Payment Confirmation', booked: 9, capacity: 16 },
-  ])
+// ─── Appointment Scheduling ───
+const appointmentSchedules = ref<AppointmentScheduleView[]>([])
+const scheduleDraft = ref<AppointmentScheduleDraft>({
+  type: 'Medical Appointment',
+  startDate: '',
+  endDate: '',
+  capacity: 30
+})
 
-  const selectedSlotId = ref(2)
+async function loadAppointmentSchedules() {
+  appointmentSchedules.value = await fetchSchedules()
+}
 
-  // Computed
-  const activeSlot = computed(() =>
-    appointmentSlots.value.find((s) => s.id === selectedSlotId.value) ?? appointmentSlots.value[0]
-  )
-  const totalStudents = computed(() => 284)
-  const checkedInStudents = computed(() => 198)
-  const completedSteps = computed(() => checklistSteps.value.filter((s) => s.status === 'completed').length)
-  const completionRate = computed(() => Math.round((completedSteps.value / checklistSteps.value.length) * 100))
-  const allStepsCompleted = computed(() => completedSteps.value === checklistSteps.value.length)
-  const studentTimeline = computed(() =>
-    checklistSteps.value.map((step, i) => ({ ...step, order: i + 1, active: step.id === activeStepId.value }))
-  )
+async function openAppointmentDay() {
+  if (!scheduleDraft.value.startDate || !scheduleDraft.value.endDate) {
+    showToast('Please select both a start and end date.', 'error')
+    return
+  }
+  if (new Date(scheduleDraft.value.startDate) > new Date(scheduleDraft.value.endDate)) {
+    showToast('The end date must be after or equal to the start date.', 'error')
+    return
+  }
+  if (scheduleDraft.value.capacity < 1) {
+    showToast('Capacity must be at least 1.', 'error')
+    return
+  }
 
-  // Actions
-  function signIn() {
+  try {
+    await openScheduleDay(scheduleDraft.value)
+    showToast(`${scheduleDraft.value.type} days opened successfully!`, 'success')
+    
+    // Reset form
+    scheduleDraft.value.startDate = ''
+    scheduleDraft.value.endDate = ''
+    scheduleDraft.value.capacity = 30
+    
+    await loadAppointmentSchedules()
+  } catch (error: any) {
+    showToast(error.message || 'Failed to open schedule days.', 'error')
+  }
+}
+
+function removeAppointmentDay(id: string) {
+  requestConfirm('Are you sure you want to close this day? Students will no longer be able to book it.', async () => {
+    try {
+      await deleteScheduleDay(id)
+      showToast('Schedule day closed.', 'success')
+      await loadAppointmentSchedules()
+    } catch (error: any) {
+      showToast(error.message || 'Failed to close schedule day.', 'error')
+    }
+  })
+}
+
+async function updateScheduleCapacity(id: string, newCapacity: number) {
+    if (newCapacity < 1) {
+      showToast('Capacity must be at least 1.', 'error')
+      return
+    }
+    try {
+      await updateCapacityService(id, newCapacity)
+      showToast('Daily capacity updated!', 'success')
+      await loadAppointmentSchedules()
+    } catch (error: any) {
+      showToast(error.message || 'Failed to update capacity.', 'error')
+    }
+  }
+
+// ─── Auth actions ───
+async function signInAction() {
+  loginError.value = null; isLoading.value  = true
+  try {
+    const session = await signIn(loginForm.value.email, loginForm.value.password)
+    if (!session) throw new Error('Login failed — no session returned.')
+    const profile = await fetchUserProfile(session.user.id)
+    if (!profile || profile.role !== 'admin') {
+      await signOut()
+      throw new Error('Access denied: admin accounts only.')
+    }
+    currentUserId.value = session.user.id
+    currentUserName.value = profile.full_name ?? currentUserName.value
     loggedIn.value = true
-    activeSection.value = 'overview'
+    loginForm.value = { email: '', password: '' }
+    await Promise.all([loadAnnouncements(), loadChecklistSteps(), loadAppointmentSchedules()])
+  } catch (err: unknown) {
+    loginError.value = err instanceof Error ? err.message : 'Sign-in failed.'
+  } finally {
+    isLoading.value = false
   }
+}
 
-  function publishAnnouncement() {
-    announcements.value.unshift({
-      id: Date.now(),
-      title: announcementDraft.title,
-      audience: announcementDraft.audience,
-      publishedAt: 'Just now',
-      body: announcementDraft.body,
-      priority: announcementDraft.priority,
-    })
-    announcementDraft.title = 'Timeline Update'
-    announcementDraft.audience = 'All students'
-    announcementDraft.body = 'Please check the latest enrollment instructions before visiting campus.'
-    announcementDraft.priority = 'Standard'
-  }
+async function signOutAction() {
+  await signOut()
+  loggedIn.value = false; currentUserId.value = null
+  announcements.value = []; checklistSteps.value = []; appointmentSchedules.value = []
+  activeSection.value = 'overview'
+}
 
-  function addChecklistStep() {
-    checklistSteps.value.push({
-      id: Date.now(),
-      title: `New Step ${checklistSteps.value.length + 1}`,
-      description: 'Define the next enrollment action or verification requirement.',
-      status: 'pending',
-    })
-  }
+async function restoreSession() {
+  const session = await getSession()
+  if (!session) return
+  const profile = await fetchUserProfile(session.user.id)
+  if (!profile || profile.role !== 'admin') return
+  currentUserId.value = session.user.id
+  currentUserName.value = profile.full_name ?? currentUserName.value
+  loggedIn.value = true
+  await Promise.all([loadAnnouncements(), loadChecklistSteps(), loadAppointmentSchedules()])
+}
 
-  function toggleChecklistStatus(stepId: number) {
-    checklistSteps.value = checklistSteps.value.map((step) => {
-      if (step.id !== stepId) return step
-      const next: StepStatus = step.status === 'pending' ? 'in-review' : step.status === 'in-review' ? 'completed' : 'pending'
-      return { ...step, status: next }
-    })
-  }
-
-  function activateStep(stepId: number) {
-    activeStepId.value = stepId
-  }
-
-  function reserveSlot(slotId: number) {
-    appointmentSlots.value = appointmentSlots.value.map((slot) => {
-      if (slot.id !== slotId || slot.booked >= slot.capacity) return slot
-      return { ...slot, booked: slot.booked + 1 }
-    })
-  }
-
-  function getStepBadgeClass(status: StepStatus) {
-    if (status === 'completed') return 'badge--done'
-    if (status === 'in-review') return 'badge--progress'
-    return 'badge--pending'
-  }
-
+// ─── Export ───
+export function useEnrollStore() {
   return {
-    // State
-    loggedIn, activeSection, activeStepId, loginForm,
-    checklistSteps, announcementDraft, announcements, appointmentSlots, selectedSlotId,
-    // Computed
-    activeSlot, totalStudents, checkedInStudents, completedSteps, completionRate, allStepsCompleted, studentTimeline,
-    // Actions
-    signIn, publishAnnouncement, addChecklistStep, toggleChecklistStatus, activateStep, reserveSlot, getStepBadgeClass,
+    loggedIn, loginForm, loginError, isLoading, currentUserId, currentUserName, activeSection,
+    announcements, announcementDraft, editingAnnouncementId,
+    checklistSteps, activeStepId,
+    appointmentSchedules, scheduleDraft,
+    totalSteps, completedSteps, completionRate, allStepsCompleted, studentTimeline,
+    toastMsg, toastType, toastVisible, showToast, confirmDialog, requestConfirm, cancelConfirm,
+    signIn: signInAction, signOut: signOutAction, restoreSession,
+    publishAnnouncement, loadAnnouncements, togglePin, startEditAnnouncement, cancelEditAnnouncement, deleteAnnouncement,
+    addChecklistStep, removeChecklistStep, activateStep, loadChecklistSteps,
+    loadAppointmentSchedules, openAppointmentDay, removeAppointmentDay,updateScheduleCapacity,
   }
 }
