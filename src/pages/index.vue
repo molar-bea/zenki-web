@@ -1,13 +1,10 @@
 <script setup lang="ts">
 import { reactive, onMounted } from 'vue'
 import { useEnrollStore } from '../composables/useEnrollStore.ts'
-import LoginPage from './LoginPage.vue'
-import OverviewPage from './OverviewPage.vue'
-import ChecklistPage from './ChecklistPage.vue'
-import AnnouncementsPage from './AnnouncementsPage.vue'
-import AppointmentsPage from './AppointmentsPage.vue'
+import { useRouter } from 'vue-router'
 import AppSidebar from '../components/AppSidebar.vue'
 
+// 2. Wrap the composable in reactive() so the templates can read the data natively
 const store = reactive(useEnrollStore())
 
 // Restore an existing Supabase session on page load

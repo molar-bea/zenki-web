@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { supabase } from '../utils/supabase'
 import enrollmateLogo from '../assets/enrollmateLogo.png'
 
 const props = defineProps<{
@@ -19,7 +22,7 @@ const emit = defineEmits<{
         <img :src="enrollmateLogo" alt="EnrollMate logo" class="logo" />
         <h1>ENROLLMATE</h1>
       </div>
-      <div class = description >
+      <div class="description">
         <p class="eyebrow eyebrow--dark">Secure access</p>
         <h2>Administrator sign-in</h2>
       </div>
@@ -64,7 +67,7 @@ const emit = defineEmits<{
 }
 
 .brand h1 {
-  font-family: 'Inter',sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 1.25rem;
   letter-spacing: 2px;
   margin: 0;
@@ -75,17 +78,18 @@ const emit = defineEmits<{
   display: flex;
   flex-direction: column;
   align-items: start;
-  font-family: 'Inter',sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 1.20rem;
   letter-spacing: 1px;
   margin: 0;
   color: var(--clr-ink);
+  width: 100%; /* Keeps alignment stable */
 }
 
-.description h2{
-
+.description h2 {
   font-family: var(--font-display);
   font-size: 1.5rem;
+  margin-top: 0.25rem;
 }
 
 .eyebrow {
@@ -94,6 +98,7 @@ const emit = defineEmits<{
   letter-spacing: 0.06em;
   margin-top: 1.5rem;
 }
+
 .login-form {
   width: 100%;
   display: flex;
@@ -122,11 +127,23 @@ const emit = defineEmits<{
   font-weight: 600;
   cursor: pointer;
   transition: opacity 0.2s;
+  width: 100%;
 }
 
-.btn-signin:hover {
+.btn-signin:hover:not(:disabled) {
   opacity: 0.9;
 }
 
+.btn-signin:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
+.error-msg {
+  color: #bf4343;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+  text-align: center;
+  font-weight: 500;
+}
 </style>

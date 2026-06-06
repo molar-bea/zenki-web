@@ -1,17 +1,33 @@
 <script setup lang="ts">
-import type { Ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { supabase } from '../utils/supabase'
 import enrollmateLogo from '../assets/enrollmateLogo.png'
 
-defineProps<{
-  activeSection: string | Ref<string>
-}>()
+const router = useRouter()
+const adminEmail = ref('Loading...')
 
-const emit = defineEmits<{
-  (e: 'navigate', section: string): void
-  (e: 'sign-out'): void
-}>()
+// Array of route objects to keep your v-for loop clean
+const navItems = [
+  { name: 'overview', path: '/dashboard' },
+  { name: 'checklist', path: '/dashboard/checklist' },
+  { name: 'announcements', path: '/dashboard/announcements' },
+  { name: 'appointments', path: '/dashboard/appointments' }
+]
 
-const navItems = ['overview', 'checklist', 'announcements', 'appointments']
+// Fetch the logged-in user's email to display in the footer
+onMounted(async () => {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user && user.email) {
+    adminEmail.value = user.email
+  }
+})
+
+// Handle real Supabase sign-out
+const handleSignOut = async () => {
+  await supabase.auth.signOut()
+  router.push('/') // Kick them back to the login page
+}
 </script>
 
 <template>
@@ -25,39 +41,40 @@ const navItems = ['overview', 'checklist', 'announcements', 'appointments']
     </div>
 
     <nav class="nav-list" aria-label="Dashboard sections">
-      <button
+      <router-link
         v-for="item in navItems"
-        :key="item"
-        type="button"
+        :key="item.name"
+        :to="item.path"
         class="nav-item"
-        :class="{ 'nav-item--active': activeSection === item }"
-        @click="emit('navigate', item)"
+        active-class="nav-item--active"
+        exact-active-class="nav-item--active"
       >
         <span class="nav-item__icon">
-          <svg v-if="item === 'overview'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg v-if="item.name === 'overview'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/>
           </svg>
           
-          <svg v-if="item === 'checklist'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg v-if="item.name === 'checklist'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>
           </svg>
 
-          <svg v-if="item === 'announcements'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg v-if="item.name === 'announcements'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>
           </svg>
 
-          <svg v-if="item === 'appointments'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg v-if="item.name === 'appointments'" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><path d="M17.5 17.5 16 16.25V14"/><path d="M22 16a6 6 0 1 1-12 0 6 6 0 0 1 12 0Z"/>
           </svg>
         </span>
         
-        <span class="nav-item__label">{{ item }}</span>
-      </button>
+        <span class="nav-item__label">{{ item.name }}</span>
+      </router-link>
     </nav>
 
     <div class="sidebar__footer">
-      <p>Signed in as Administrator1</p>
-      <button class="btn-signout" type="button" @click="emit('sign-out')">
+      <p class="user-email" :title="adminEmail">{{ adminEmail }}</p>
+      
+      <button class="btn-signout" type="button" @click="handleSignOut">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: -3px;">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>
         </svg>
@@ -68,6 +85,7 @@ const navItems = ['overview', 'checklist', 'announcements', 'appointments']
 </template>
 
 <style scoped>
+/* Keep all your existing styles exactly as they were! */
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -119,6 +137,8 @@ const navItems = ['overview', 'checklist', 'announcements', 'appointments']
   gap: 0.5rem;
 }
 
+/* Because <router-link> renders as an <a> tag by default, 
+we need to ensure text-decoration is removed */
 .nav-item {
   display: flex;
   align-items: center;
@@ -132,6 +152,7 @@ const navItems = ['overview', 'checklist', 'announcements', 'appointments']
   text-transform: capitalize;
   cursor: pointer;
   transition: all 0.2s ease;
+  text-decoration: none; 
 }
 
 .nav-item:hover {
@@ -156,7 +177,6 @@ const navItems = ['overview', 'checklist', 'announcements', 'appointments']
   flex-shrink: 0;
 }
 
-/* Size the SVGs */
 .nav-item__icon svg {
   width: 20px;
   height: 20px;
@@ -172,11 +192,14 @@ const navItems = ['overview', 'checklist', 'announcements', 'appointments']
   border-top: 1px solid rgba(184, 216, 216, 0.2);
 }
 
-.sidebar__footer p {
+.sidebar__footer p.user-email {
   margin: 0 0 1rem;
   color: #B8D8D8;
   font-size: 0.8rem;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis; /* Truncates long emails gracefully */
 }
 
 .btn-signout {
