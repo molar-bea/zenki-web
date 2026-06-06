@@ -10,7 +10,6 @@ const route = useRoute()
 
 onMounted(() => store.restoreSession())
 
-// This watches the URL so if you refresh the page, the sidebar stays on the right highlight!
 watch(() => route.name, (newName) => {
   if (newName === 'Overview') store.activeSection = 'overview'
   if (newName === 'Checklist') store.activeSection = 'checklist'
@@ -38,7 +37,7 @@ async function handleSignOut() {
       </div>
     </Transition>
 
-    <section class="dashboard">
+    <div class="dashboard">
       <AppSidebar
         :active-section="store.activeSection"
         @navigate="handleNavigate"
@@ -67,26 +66,35 @@ async function handleSignOut() {
           @cancel-edit="store.cancelEditAnnouncement"
         />
       </main>
-    </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.shell { min-height: 100vh; }
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
 .dashboard {
+  flex: 1;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   background-color: #ffffff;
 }
+
 .dashboard__main {
   padding: 3rem 4rem;
   background-color: #ffffff;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  min-width: 0;
 }
-/* ── Global Toast ──────────────────────────────────────────────────────────── */
+
+/* ── Global Toast ──────────────────────────────────────────────────────────────── */
 .toast {
   display: flex;
   align-items: center;
@@ -101,6 +109,7 @@ async function handleSignOut() {
   z-index: 9999;
   box-shadow: var(--shadow-card);
   min-width: 280px;
+  max-width: calc(100vw - 3rem);
 }
 
 .toast--success {
@@ -130,8 +139,31 @@ async function handleSignOut() {
 .toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
 .toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-12px) scale(0.97); }
 
+/* ── Responsive ──────────────────────────────────────────────────────────────── */
 @media (max-width: 1180px) {
-  .dashboard { grid-template-columns: 1fr; }
-  .dashboard__main { padding: 2rem; }
+  .dashboard__main {
+    padding: 2rem 2.5rem;
+  }
+}
+
+@media (max-width: 768px) {
+  /* On mobile, sidebar is fixed/overlay — remove it from the grid */
+  .dashboard {
+    grid-template-columns: 1fr;
+    min-height: unset;
+  }
+
+  .dashboard__main {
+    padding: 1.25rem 1rem;
+    gap: 1.25rem;
+  }
+
+  .toast {
+    top: auto;
+    bottom: 1.25rem;
+    right: 1rem;
+    left: 1rem;
+    min-width: unset;
+  }
 }
 </style>
