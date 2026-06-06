@@ -30,7 +30,7 @@ onMounted(() => store.restoreSession())
     <section v-else class="dashboard">
         <AppSidebar
         :active-section="store.activeSection"
-        @navigate="(s) => (store.activeSection = s as any)"
+        @navigate="(s:string) => (store.activeSection = s as any)"
         @sign-out="store.signOut"
       />
 
