@@ -1,18 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { reactive } from 'vue'
 import { useRouter } from 'vue-router'
-import { supabase } from '../utils/supabase'
+import { useEnrollStore } from '../composables/useEnrollStore'
 import enrollmateLogo from '../assets/enrollmateLogo.png'
 
-const props = defineProps<{
-  loginForm: { email: string; password: string }
-}>()
+const store = reactive(useEnrollStore())
+const router = useRouter()
 
-const emit = defineEmits<{
-  (e: 'sign-in'): void
-}>()
-
-
+async function handleLogin() {
+  await store.signIn()
+  // If the sign-in is successful, move the user to the dashboard route
+  if (store.loggedIn) {
+    router.push('/dashboard')
+  }
+}
 </script>
 
 <template>
@@ -27,11 +28,15 @@ const emit = defineEmits<{
         <h2>Administrator sign-in</h2>
       </div>
       
-      
-      <form class=" login-form" @submit.prevent="emit('sign-in')">
-        <input v-model="loginForm.email" type="email" placeholder="Email" />
-        <input v-model="loginForm.password" type="password" placeholder="Password" />
-        <button type="submit" class="btn-signin">Sign in</button>
+      <form class="login-form" @submit.prevent="handleLogin">
+        <input v-model="store.loginForm.email" type="email" placeholder="Email" />
+        <input v-model="store.loginForm.password" type="password" placeholder="Password" />
+        
+        <button type="submit" class="btn-signin" :disabled="store.isLoading">
+          {{ store.isLoading ? 'Signing in...' : 'Sign in' }}
+        </button>
+
+        <p v-if="store.loginError" class="error-msg">{{ store.loginError }}</p>
       </form>
     </div>
   </main>
@@ -83,7 +88,7 @@ const emit = defineEmits<{
   letter-spacing: 1px;
   margin: 0;
   color: var(--clr-ink);
-  width: 100%; /* Keeps alignment stable */
+  width: 100%; 
 }
 
 .description h2 {
