@@ -37,7 +37,7 @@ const todaysSlots = computed(() => {
     <header class="overview-header">
       <div class="header-titles">
         <h1 class="page-title">Welcome, Admin</h1>
-        <p class="page-subtitle">Here is your dashboard overview for today.</p>
+        <p class="page-subtitle">Here is your dashboard overview for the day.</p>
       </div>
       
       <div class="date-badge">
