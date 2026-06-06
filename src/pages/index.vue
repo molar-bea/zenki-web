@@ -1,14 +1,32 @@
 <script setup lang="ts">
-import { reactive, onMounted } from 'vue'
-import { useEnrollStore } from '../composables/useEnrollStore.ts'
-import { useRouter } from 'vue-router'
+import { reactive, onMounted, watch } from 'vue'
+import { useEnrollStore } from '../composables/useEnrollStore'
+import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from '../components/AppSidebar.vue'
 
-// 2. Wrap the composable in reactive() so the templates can read the data natively
 const store = reactive(useEnrollStore())
+const router = useRouter()
+const route = useRoute()
 
-// Restore an existing Supabase session on page load
 onMounted(() => store.restoreSession())
+
+// This watches the URL so if you refresh the page, the sidebar stays on the right highlight!
+watch(() => route.name, (newName) => {
+  if (newName === 'Overview') store.activeSection = 'overview'
+  if (newName === 'Checklist') store.activeSection = 'checklist'
+  if (newName === 'Announcements') store.activeSection = 'announcements'
+  if (newName === 'Appointments') store.activeSection = 'appointments'
+}, { immediate: true })
+
+function handleNavigate(section: string) {
+  if (section === 'overview') router.push('/dashboard')
+  else router.push(`/dashboard/${section}`)
+}
+
+async function handleSignOut() {
+  await store.signOut()
+  router.push('/')
+}
 </script>
 
 <template>
@@ -19,55 +37,34 @@ onMounted(() => store.restoreSession())
         {{ store.toastMsg }}
       </div>
     </Transition>
-    <LoginPage
-      v-if="!store.loggedIn"
-      :login-form="store.loginForm"
-      :login-error="store.loginError"
-      :is-loading="store.isLoading"
-      @sign-in="store.signIn"
-    />
 
-    <section v-else class="dashboard">
-        <AppSidebar
+    <section class="dashboard">
+      <AppSidebar
         :active-section="store.activeSection"
-        @navigate="(s:string) => (store.activeSection = s as any)"
-        @sign-out="store.signOut"
+        @navigate="handleNavigate"
+        @sign-out="handleSignOut"
       />
 
       <main class="dashboard__main">
-
-        <OverviewPage
-          v-if="store.activeSection === 'overview'"
+        <router-view 
           :announcements="store.announcements"
           :checklist-steps="store.checklistSteps"
           :completed-steps="store.completedSteps"
           :completion-rate="store.completionRate"
           :appointment-slots="store.appointmentSchedules"
-          @go-announcements="() => (store.activeSection = 'announcements')"
-        />
-        <ChecklistPage
-          v-else-if="store.activeSection === 'checklist'"
-          :checklist-steps="store.checklistSteps"
           :active-step-id="store.activeStepId"
-          :completion-rate="store.completionRate"
           :student-timeline="store.studentTimeline"
+          :announcement-draft="store.announcementDraft"
+          :is-editing="!!store.editingAnnouncementId"
+          @go-announcements="handleNavigate('announcements')"
           @add-step="store.addChecklistStep"
           @activate-step="store.activateStep"
           @remove-step="store.removeChecklistStep"
-        />
-       <AnnouncementsPage
-          v-else-if="store.activeSection === 'announcements'"
-          :announcement-draft="store.announcementDraft"
-          :announcements="store.announcements"
-          :is-editing="!!store.editingAnnouncementId"
           @publish="store.publishAnnouncement"
           @toggle-pin="store.togglePin"
           @edit="store.startEditAnnouncement"
           @delete="store.deleteAnnouncement"
           @cancel-edit="store.cancelEditAnnouncement"
-        />
-        <AppointmentsPage
-          v-else
         />
       </main>
     </section>
