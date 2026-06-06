@@ -39,15 +39,10 @@ const confirmDialog = ref({
 })
 
 function requestConfirm(message: string, onConfirm: () => void) {
-  confirmDialog.value = {
-    isOpen: true,
-    message,
-    onConfirm: () => {
+    if (window.confirm(message)) {
       onConfirm()
-      confirmDialog.value.isOpen = false
     }
   }
-}
 
 function cancelConfirm() {
   confirmDialog.value.isOpen = false
