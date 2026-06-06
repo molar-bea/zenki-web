@@ -1,0 +1,269 @@
+/* 1. Add this import line at the very top */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* ── EnrollMate Design Tokens ── */
+:root {
+  --clr-stone:    #4F6367;
+  --clr-ink:      #191716;
+  --clr-slate:    #7A9E9F;
+  --clr-mist:     #B8D8D8;
+  --clr-fog:      #E0E2DB;
+
+  --radius-sm:    14px;
+  --radius-md:    20px;
+  --radius-lg:    28px;
+  --radius-pill:  999px;
+
+  --shadow-card:  0 18px 42px rgba(0,0,0,0.22);
+  --shadow-subtle: 0 4px 16px rgba(0,0,0,0.12);
+
+  /* 2. Add 'Inter' to the front of these two lines */
+  --font-display: 'Inter', Georgia, 'Times New Roman', serif;
+  --font-body:    'Inter', 'Segoe UI', 'Trebuchet MS', sans-serif;
+
+  --transition:   0.2s ease;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ... keep the rest of your file exactly as is ... */
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(122,158,159,0.26), transparent 34%),
+    linear-gradient(180deg, #191716 0%, #1f1c1b 44%, #111010 100%);
+  color: var(--clr-ink);
+  font-family: var(--font-body);
+}
+
+button, input, textarea { font: inherit; }
+
+/* ── Shared utility classes ── */
+.eyebrow {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(25,23,22,0.65);
+}
+
+.eyebrow--light { color: rgba(224,226,219,0.65); }
+
+.panel {
+  padding: 1.2rem;
+  border-radius: var(--radius-lg);
+  background: rgba(224,226,219,0.96);
+  box-shadow: var(--shadow-card);
+}
+
+.panel--wide    { grid-column: span 2; }
+.panel--builder { min-height: 32rem; }
+.panel--detail  { min-height: 32rem; }
+
+.panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.panel h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  color: var(--clr-ink);
+}
+
+/* ── Buttons ── */
+.btn {
+  border: 0;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform var(--transition), background var(--transition), color var(--transition);
+}
+
+.btn:hover { transform: translateY(-1px); }
+
+.btn--primary {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.95rem 1.35rem;
+  background: linear-gradient(135deg, var(--clr-mist), var(--clr-slate));
+  color: var(--clr-ink);
+}
+
+.btn--primary-sm {
+  width: auto;
+  margin-top: 0;
+  padding: 0.65rem 1.1rem;
+  background: linear-gradient(135deg, var(--clr-mist), var(--clr-slate));
+  color: var(--clr-ink);
+}
+
+.btn--ghost {
+  margin-top: 1rem;
+  padding: 0.95rem 1.35rem;
+  background: rgba(224,226,219,0.18);
+  color: var(--clr-fog);
+  border: 1px solid rgba(224,226,219,0.18);
+}
+
+.btn--ghost-dark {
+  margin-top: 1rem;
+  padding: 0.95rem 1.35rem;
+  background: rgba(79,99,103,0.12);
+  color: var(--clr-ink);
+  border: 1px solid rgba(79,99,103,0.18);
+}
+
+.btn--secondary {
+  margin-top: 1rem;
+  padding: 0.95rem 1.35rem;
+  background: rgba(224,226,219,0.18);
+  color: var(--clr-fog);
+  border: 1px solid rgba(224,226,219,0.18);
+}
+
+/* ── Form fields ── */
+.field {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 1rem;
+}
+
+.field span {
+  font-size: 0.85rem;
+  color: rgba(224,226,219,0.85);
+}
+
+.field--dark span { color: rgba(25,23,22,0.75); }
+
+.field input,
+.field textarea {
+  width: 100%;
+  border: 1px solid rgba(184,216,216,0.24);
+  border-radius: var(--radius-sm);
+  padding: 0.9rem 1rem;
+  color: var(--clr-fog);
+  background: rgba(224,226,219,0.08);
+  outline: none;
+}
+
+.field--dark input,
+.field--dark textarea {
+  border-color: rgba(79,99,103,0.22);
+  color: var(--clr-ink);
+  background: rgba(255,255,255,0.52);
+}
+
+.field input::placeholder,
+.field textarea::placeholder { color: rgba(224,226,219,0.45); }
+
+/* ── Status badges ── */
+.status-badge {
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--radius-pill);
+  background: rgba(224,226,219,0.75);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.badge--done     { color: #204f45; }
+.badge--progress { color: #7b5500; }
+.badge--pending  { color: #76595f; }
+
+/* ── Success banner ── */
+.success-banner {
+  margin: 0 1rem;
+  padding: 1rem 1.2rem;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(122,158,159,0.22), rgba(184,216,216,0.9));
+  color: var(--clr-ink);
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+/* ── Detail stack ── */
+.detail-stack {
+  display: flex;
+  align-items: stretch;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1.25rem;
+}
+
+.detail-stack div {
+  flex: 1 1 10rem;
+  padding: 0.95rem 1rem;
+  border-radius: var(--radius-md);
+  background: rgba(79,99,103,0.1);
+}
+
+.detail-stack span { display: block; font-size: 0.8rem; color: rgba(25,23,22,0.65); }
+.detail-stack strong { display: block; font-size: 1.25rem; margin-top: 0.2rem; }
+
+.detail-copy {
+  color: rgba(25,23,22,0.78);
+  line-height: 1.55;
+  margin: 0.75rem 0 0;
+}
+
+/* ── Announcement card ── */
+.announcement-card {
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  background: rgba(79,99,103,0.11);
+}
+
+.announcement-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.announcement-card__top span {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: var(--clr-stone);
+}
+
+.announcement-card h3 { margin: 0 0 0.35rem; color: var(--clr-ink); font-size: 1rem; }
+.announcement-card p  { margin: 0 0 0.5rem; color: rgba(25,23,22,0.78); line-height: 1.5; font-size: 0.9rem; }
+.announcement-card footer { font-size: 0.78rem; color: rgba(25,23,22,0.55); }
+
+/* ── Capacity meter ── */
+.capacity-meter {
+  height: 14px;
+  margin: 1.2rem 0 0.8rem;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: rgba(79,99,103,0.14);
+}
+
+.capacity-meter__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--clr-slate), var(--clr-stone));
+  transition: width 0.4s ease;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1180px) {
+  .panel--wide { grid-column: auto; }
+  .success-banner { flex-direction: column; }
+}
+
+@media (max-width: 720px) {
+  .panel { border-radius: var(--radius-md); padding: 1rem; }
+  .success-banner { flex-direction: column; }
+}
