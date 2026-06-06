@@ -9,7 +9,6 @@ const router = useRouter()
 
 async function handleLogin() {
   await store.signIn()
-  // If the sign-in is successful, move the user to the dashboard route
   if (store.loggedIn) {
     router.push('/dashboard')
   }
@@ -29,8 +28,8 @@ async function handleLogin() {
       </div>
       
       <form class="login-form" @submit.prevent="handleLogin">
-        <input v-model="store.loginForm.email" type="email" placeholder="Email" />
-        <input v-model="store.loginForm.password" type="password" placeholder="Password" />
+        <input v-model="store.loginForm.email" type="email" placeholder="Email" autocomplete="email" />
+        <input v-model="store.loginForm.password" type="password" placeholder="Password" autocomplete="current-password" />
         
         <button type="submit" class="btn-signin" :disabled="store.isLoading">
           {{ store.isLoading ? 'Signing in...' : 'Sign in' }}
@@ -49,6 +48,7 @@ async function handleLogin() {
   align-items: center;
   justify-content: center;
   background-color: #ffffff;
+  padding: 1.5rem;
 }
 
 .login-box {
@@ -56,7 +56,7 @@ async function handleLogin() {
   flex-direction: column;
   align-items: center;
   width: 100%;
-  max-width: 320px;
+  max-width: 340px;
 }
 
 .brand {
@@ -66,7 +66,7 @@ async function handleLogin() {
 }
 
 .logo {
-  width: 350px;
+  width: min(280px, 80vw);
   height: auto;
   margin-bottom: 0.5rem;
 }
@@ -88,7 +88,7 @@ async function handleLogin() {
   letter-spacing: 1px;
   margin: 0;
   color: var(--clr-ink);
-  width: 100%; 
+  width: 100%;
 }
 
 .description h2 {
@@ -110,21 +110,25 @@ async function handleLogin() {
   flex-direction: column;
   gap: 12px;
   align-items: center;
+  margin-top: 0.5rem;
 }
 
 .login-form input {
   width: 100%;
-  padding: 12px;
+  padding: 13px 14px;
   border-radius: var(--radius-sm);
   border: none;
   background: #d9d9d9;
   font-size: 1rem;
   outline: none;
+  box-sizing: border-box;
+  /* Prevent iOS zoom on focus */
+  font-size: max(1rem, 16px);
 }
 
 .btn-signin {
   margin-top: 1rem;
-  padding: 10px 32px;
+  padding: 13px 32px;
   border-radius: var(--radius-sm);
   border: none;
   background: var(--clr-stone);
@@ -133,6 +137,8 @@ async function handleLogin() {
   cursor: pointer;
   transition: opacity 0.2s;
   width: 100%;
+  font-size: 1rem;
+  font-family: inherit;
 }
 
 .btn-signin:hover:not(:disabled) {
@@ -150,5 +156,12 @@ async function handleLogin() {
   margin-top: 0.5rem;
   text-align: center;
   font-weight: 500;
+}
+
+@media (max-width: 480px) {
+  .login-wrapper {
+    align-items: flex-start;
+    padding-top: 3rem;
+  }
 }
 </style>

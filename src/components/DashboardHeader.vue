@@ -10,7 +10,7 @@ defineProps<{
 
 <template>
   <header class="hero-bar">
-    <div>
+    <div class="hero-text">
       <p class="eyebrow eyebrow--light">Welcome back, Admin</p>
       <h1>Enrollment workflow dashboard</h1>
     </div>
@@ -37,16 +37,22 @@ defineProps<{
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 1.25rem;
   padding: 1rem 1.2rem 0;
+  flex-wrap: wrap;
+}
+
+.hero-text {
+  min-width: 0;
 }
 
 .hero-bar h1 {
   margin: 0;
   font-family: var(--font-display);
   letter-spacing: -0.02em;
-  font-size: clamp(1.8rem, 3vw, 3.2rem);
+  font-size: clamp(1.5rem, 3vw, 3.2rem);
   color: var(--clr-fog);
+  line-height: 1.15;
 }
 
 .hero-stats {
@@ -56,8 +62,8 @@ defineProps<{
 }
 
 .stat-chip {
-  min-width: 8.5rem;
-  padding: 0.85rem 1rem;
+  min-width: 7rem;
+  padding: 0.75rem 0.9rem;
   border-radius: var(--radius-md);
   background: rgba(224,226,219,0.12);
   color: var(--clr-fog);
@@ -65,29 +71,58 @@ defineProps<{
 
 .stat-chip span {
   display: block;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: rgba(224,226,219,0.75);
   letter-spacing: 0.04em;
+  line-height: 1.3;
 }
 
 .stat-chip strong {
   display: block;
-  font-size: 1.35rem;
+  font-size: 1.25rem;
   margin-top: 0.2rem;
 }
 
+/* ── Responsive ──────────────────────────────────────────────────────────────── */
 @media (max-width: 1180px) {
   .hero-bar {
     flex-direction: column;
     align-items: flex-start;
   }
+
   .hero-stats {
     width: 100%;
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
-@media (max-width: 720px) {
-  .hero-stats { grid-template-columns: 1fr; }
+@media (max-width: 640px) {
+  .hero-bar {
+    padding: 0.75rem 0.9rem 0;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+  }
+
+  .stat-chip {
+    min-width: unset;
+    padding: 0.65rem 0.75rem;
+  }
+
+  .stat-chip span {
+    font-size: 0.66rem;
+  }
+
+  .stat-chip strong {
+    font-size: 1.1rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .hero-stats {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 </style>

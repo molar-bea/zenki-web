@@ -443,7 +443,7 @@ watch(requirements, (list) => {
 .page-title {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 2.2rem;
+  font-size: clamp(1.5rem, 4vw, 2.2rem);
   font-weight: 800;
   color: var(--clr-ink);
   letter-spacing: -0.02em;
@@ -801,10 +801,11 @@ watch(requirements, (list) => {
   border: 1px solid var(--clr-mist);
   background: #fcfcfc;
   color: var(--clr-ink);
-  font-size: 0.95rem;
+  font-size: max(0.95rem, 16px);
   outline: none;
   transition: border-color var(--transition);
   font-family: inherit;
+  box-sizing: border-box;
 }
 
 .form-input::placeholder { color: #a0a0a0; }
@@ -904,10 +905,20 @@ watch(requirements, (list) => {
   .form-panel { order: -1; }
 }
 
-@media (max-width: 720px) {
-  .page-title  { font-size: 1.6rem; }
+@media (max-width: 768px) {
+  .checklist-view { padding: 0 0 1.5rem; }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .form-dates-row { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 600px) {
   .req-card   { grid-template-columns: 40px 1fr; }
   .req-card__actions { flex-direction: row; grid-column: 1 / -1; }
+  .left-panel { padding: 1rem; }
 }
 </style>

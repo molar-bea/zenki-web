@@ -10,7 +10,6 @@ const emit = defineEmits<{
   (e: 'go-announcements'): void
 }>()
 
-// 1. Calculate today's date formatted to match the slot.date from the database/service
 const today = new Date()
 const todayFormatted = computed(() => {
   return today.toLocaleDateString('en-US', {
@@ -21,11 +20,9 @@ const todayFormatted = computed(() => {
   })
 })
 
-// 2. Format variables for the prominent UI date display
 const displayDay = computed(() => today.toLocaleDateString('en-US', { weekday: 'long' }))
 const displayDate = computed(() => today.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))
 
-// 3. Filter slots so only today's schedules are visible
 const todaysSlots = computed(() => {
   if (!props.appointmentSlots) return []
   return props.appointmentSlots.filter((slot: any) => slot.date === todayFormatted.value)
@@ -42,7 +39,7 @@ const todaysSlots = computed(() => {
       
       <div class="date-badge">
         <div class="date-badge__icon">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
             <line x1="16" y1="2" x2="16" y2="6"></line>
             <line x1="8" y1="2" x2="8" y2="6"></line>
@@ -130,7 +127,7 @@ const todaysSlots = computed(() => {
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .header-titles {
@@ -141,7 +138,7 @@ const todaysSlots = computed(() => {
 
 .page-title {
   font-family: 'Inter', system-ui, sans-serif;
-  font-size: 2.2rem;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
   font-weight: 800;
   color: #191716;
   margin: 0;
@@ -157,12 +154,13 @@ const todaysSlots = computed(() => {
 .date-badge {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.85rem;
   background: #ffffff;
   border: 1px solid #E0E2DB;
-  padding: 0.75rem 1.25rem;
+  padding: 0.65rem 1.1rem;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  flex-shrink: 0;
 }
 
 .date-badge__icon {
@@ -171,7 +169,7 @@ const todaysSlots = computed(() => {
   justify-content: center;
   color: #4F6367;
   background: #E0E2DB;
-  padding: 0.6rem;
+  padding: 0.5rem;
   border-radius: 8px;
 }
 
@@ -181,14 +179,14 @@ const todaysSlots = computed(() => {
 }
 
 .date-badge__day {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 800;
   color: #191716;
   line-height: 1.2;
 }
 
 .date-badge__date {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: #7A9E9F;
   font-weight: 600;
   text-transform: uppercase;
@@ -202,7 +200,6 @@ const todaysSlots = computed(() => {
   gap: 2.5rem;
 }
 
-/* Light Theme Panels */
 .clean-panel {
   background: #ffffff;
   border: 1px solid #7A9E9F;
@@ -226,11 +223,10 @@ const todaysSlots = computed(() => {
 
 .panel__header h2 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   color: #191716;
 }
 
-/* Announcements Section (No Box) */
 .announcements-section {
   display: flex;
   flex-direction: column;
@@ -245,7 +241,7 @@ const todaysSlots = computed(() => {
 
 .section__header h2 {
   margin: 0;
-  font-size: 1.25rem;
+  font-size: 1.15rem;
   color: #191716;
 }
 
@@ -257,8 +253,9 @@ const todaysSlots = computed(() => {
   border-radius: 6px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   transition: opacity 0.2s;
+  white-space: nowrap;
 }
 
 .btn-flat:hover {
@@ -268,7 +265,7 @@ const todaysSlots = computed(() => {
 /* Headcount List */
 .slot-summary {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 1rem;
 }
 
@@ -276,7 +273,7 @@ const todaysSlots = computed(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.25rem;
+  padding: 1.1rem 1.25rem;
   border: 1px solid #E0E2DB;
   border-radius: 8px;
   background: #fafafa;
@@ -294,7 +291,7 @@ const todaysSlots = computed(() => {
 }
 
 .slot-label {
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: #191716;
 }
@@ -306,14 +303,14 @@ const todaysSlots = computed(() => {
 }
 
 .slot-stats strong {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   color: #4F6367;
   line-height: 1;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.2rem;
 }
 
 .queued-label {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: #7A9E9F;
   text-transform: uppercase;
   font-weight: 700;
@@ -334,15 +331,15 @@ const todaysSlots = computed(() => {
 
 .feed-list {
   display: grid;
-  grid-template-columns: repeat(2, 1fr); /* Forces exactly two columns */
-  gap: 1.5rem; /* Slightly increased gap for better spacing between columns */
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
 }
 
 .feed-card {
   padding: 1.25rem;
   border: 1px solid #E0E2DB;
   border-radius: 8px;
-  background: #ffffff; /* Added white back in so the cards pop off the background */
+  background: #ffffff;
   transition: box-shadow 0.2s, border-color 0.2s;
 }
 
@@ -365,18 +362,18 @@ const todaysSlots = computed(() => {
 .feed-card__meta {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.5rem;
   flex-wrap: wrap;
 }
 
 .date {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: #7A9E9F;
   font-weight: 500;
 }
 
 .badge {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
   text-transform: uppercase;
   padding: 0.2rem 0.5rem;
@@ -400,13 +397,13 @@ const todaysSlots = computed(() => {
 
 .feed-card__title {
   margin: 0 0 0.5rem;
-  font-size: 1.1rem;
+  font-size: 1rem;
   color: #191716;
 }
 
 .feed-card__body {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   line-height: 1.5;
   color: rgba(25, 23, 22, 0.8);
   white-space: pre-wrap;
@@ -417,18 +414,29 @@ const todaysSlots = computed(() => {
   overflow: hidden;
 }
 
-@media (max-width: 720px) {
+/* ── Responsive ──────────────────────────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .feed-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
   .overview-header {
     flex-direction: column;
     align-items: flex-start;
   }
-  
+
   .date-badge {
     width: 100%;
   }
 
-  .feed-list {
-    grid-template-columns: 1fr; /* Stacks to 1 column on mobile devices */
+  .clean-panel {
+    padding: 1.1rem;
+  }
+
+  .slot-summary {
+    grid-template-columns: 1fr;
   }
 }
 </style>
