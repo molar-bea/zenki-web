@@ -1,8 +1,36 @@
 import { supabase } from '../lib/supabase'
 import type { AppointmentScheduleView, AppointmentScheduleDraft } from '../types/database.types'
 
-function mapRow(row: any): AppointmentScheduleView {
-  return {
+export async function fetchSchedules(): Promise<AppointmentScheduleView[]> {
+  // 1. Fetch all active schedules
+  const { data: schedules, error: scheduleError } = await (supabase as any)
+    .from('appointment_schedule')
+    .select('*')
+    .eq('is_deleted', false)
+    .order('schedule_date', { ascending: true })
+
+  if (scheduleError) throw new Error(scheduleError.message)
+
+  // 2. Fetch all active student bookings (excluding cancelled ones)
+  const { data: bookings, error: bookingsError } = await (supabase as any)
+    .from('appointment')
+    .select('schedule_id')
+    .eq('is_deleted', false)
+    .neq('status', 'cancelled')
+
+  if (bookingsError) throw new Error(bookingsError.message)
+
+  // 3. Count how many bookings exist for each schedule ID
+  const bookingCounts = (bookings ?? []).reduce((acc: Record<string, number>, curr: any) => {
+    const sid = curr.schedule_id;
+    if (sid) {
+      acc[sid] = (acc[sid] || 0) + 1;
+    }
+    return acc;
+  }, {});
+
+  // 4. Map the rows and inject the live count
+  return (schedules ?? []).map((row: any) => ({
     id: row.id,
     type: row.appointment_type,
     date: new Date(row.schedule_date).toLocaleDateString('en-US', {
@@ -12,20 +40,11 @@ function mapRow(row: any): AppointmentScheduleView {
       year: 'numeric'
     }),
     capacity: row.capacity,
-    booked: 0, // This will be calculated via a join once students start booking
-  }
+    booked: bookingCounts[row.id] || 0, // Automatically defaults to 0 if no one booked yet
+  }))
 }
 
-export async function fetchSchedules(): Promise<AppointmentScheduleView[]> {
-  const { data, error } = await (supabase as any)
-    .from('appointment_schedule')
-    .select('*')
-    .eq('is_deleted', false)
-    .order('schedule_date', { ascending: true })
-
-  if (error) throw new Error(error.message)
-  return (data ?? []).map(mapRow)
-}
+// ... keep your other functions (openScheduleDay, updateScheduleCapacity, etc.) below exactly as they are ...
 
 export async function openScheduleDay(draft: AppointmentScheduleDraft): Promise<void> {
   const start = new Date(draft.startDate)
